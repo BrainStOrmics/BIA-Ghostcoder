@@ -1,5 +1,5 @@
-from .utils import *
-from .prompts import load_prompt_template
+from ..utils import *
+from ..prompts import load_prompt_template
 
 
 from typing import TypedDict, Optional, Type, Any
@@ -22,7 +22,7 @@ def create_rag_agent(
     code_model: LanguageModelLike,
     *,
     max_retry = 3,
-    name: Optional[str] = "coder_subgraph",
+    name: Optional[str] = "reg_subgraph",
     config_schema: Optional[Type[Any]] = None,
     checkpointer: Optional[Checkpointer] = None,
     store: Optional[BaseStore] = None,

@@ -1,20 +1,17 @@
-from .utils import *
-from .prompts import load_prompt_template
-from coder import create_coder_agent
-from rager import create_rag_agent
+from ..utils import *
+from ..prompts import load_prompt_template
+from .coder import create_coder_agent
+from .rager import create_rag_agent
 
-from typing import TypedDict, Annotated, Optional, Type, Any
-import operator 
+from typing import TypedDict, Optional, Type, Any
 #langchain
 from langchain_core.language_models import LanguageModelLike
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.output_parsers import  JsonOutputParser
 #langgraph
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.graph import CompiledGraph
 from langgraph.types import Checkpointer
 from langgraph.store.base import BaseStore
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.pregel import RetryPolicy
 
 
@@ -23,14 +20,14 @@ def create_ghostcoder_agent(
     code_model: LanguageModelLike,
     *,
     max_retry = 3,
-    name: Optional[str] = "coder_subgraph",
+    name: Optional[str] = "ghostcoder",
     config_schema: Optional[Type[Any]] = None,
     checkpointer: Optional[Checkpointer] = None,
     store: Optional[BaseStore] = None,
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
-    ): -> CompiledGraph:
+    ) -> CompiledGraph:
 
     #----------------
     # TODO: Optimize agent framework
@@ -63,29 +60,29 @@ def create_ghostcoder_agent(
 
     # Get crawler subgraph 
     coder_subgraph = create_coder_agent(
-        chat_model, 
-        code_model,
-        max_retry = 3,
-        name: Optional[str] = "coder_subgraph",
-        config_schema,
-        checkpointer,
-        store,
-        interrupt_before,
-        interrupt_after,
-        debug,
+        chat_model = chat_model, 
+        code_model = code_model,
+        max_retry = max_retry,
+        name =  "coder_subgraph",
+        config_schema = config_schema,
+        checkpointer = checkpointer,
+        store = store,
+        interrupt_before = interrupt_before,
+        interrupt_after = interrupt_after,
+        debug = debug,
         )
 
     rager_subgraph = create_rag_agent(
-        chat_model, 
-        code_model,
-        max_retry = 3,
-        name: Optional[str] = "reg_subgraph",
-        config_schema,
-        checkpointer,
-        store,
-        interrupt_before,
-        interrupt_after,
-        debug,
+        chat_model = chat_model, 
+        code_model = code_model,
+        max_retry = max_retry,
+        name =  "reg_subgraph",
+        config_schema = config_schema,
+        checkpointer = checkpointer,
+        store = store,
+        interrupt_before = interrupt_before,
+        interrupt_after = interrupt_after,
+        debug = debug,
         )
 
     #----------------
@@ -166,6 +163,7 @@ def create_ghostcoder_agent(
             "n_error"             : 0,
             #initial input
             "generated_codeblock" : "",
+            "error_status": False,
             }
 
         # Generate bioinformatics code with coder subgraph
@@ -183,23 +181,27 @@ def create_ghostcoder_agent(
             "execution_outstr": execution_outstr
             }
 
-    def node_update_env(state:State)
-        """
-        Updates the environment with the output variables from the code execution.
-        If obj.update_to is 'Global', updates the global scope.
-        Otherwise, attempts to update the local scope, but this needs clarification.
-        """
+    # def node_update_env(state:State)
+    #     """
+    #     Updates the environment with the output variables from the code execution.
+    #     If obj.update_to is 'Global', updates the global scope.
+    #     Otherwise, attempts to update the local scope, but this needs clarification.
+    #     """
         
-        # Pass inputs
-        update_to = state['update_to']
-        output_vars = state['execution_outstr']['output_var']
+    #     # Pass inputs
+    #     update_to = state['update_to']
+    #     generated_codeblock = state['generated_codeblock']
 
-        # Update env 
-        if update_to == 'Global':
-            globals().update(output_vars)
-            print('Update variables and packages in global environment.')
-        else:
-            locals('Update variables and packages in agent runtime environment.').update(output_vars)
+    #     # Run code 
+    #     res = trial_run(generated_codeblock, inputvars)
+    #     output_vars = res['output_var']
+
+    #     # Update env 
+    #     if update_to == 'Global':
+    #         globals().update(output_vars)
+    #         print('Update variables and packages in global environment.')
+    #     else:
+    #         locals('Update variables and packages in agent runtime environment.').update(output_vars)
 
     #----------------
     # Define conditional edges
@@ -221,7 +223,7 @@ def create_ghostcoder_agent(
     builder.add_node("Task parser", node_task_parser)
     builder.add_node("Retriever", node_ref_retriever)
     builder.add_node("Coding",node_coding)
-    builder.add_node("Update env",node_update_env)
+    # builder.add_node("Update env",node_update_env)
     # add edges
     builder.add_edge(START, "Task parser")
     builder.add_conditional_edges(
@@ -232,8 +234,10 @@ def create_ghostcoder_agent(
             "continue"  : "Coding"}
         )
     builder.add_edge("Retriever","Coding")
-    builder.add_edge("Coding", "Update env")
-    builder.add_edge("Update env", END)
+    # builder.add_edge("Coding", "Update env")
+    # builder.add_edge("Update env", END)
+    builder.add_edge("Coding",END)
+
 
     return builder.compile(
         checkpointer=checkpointer,

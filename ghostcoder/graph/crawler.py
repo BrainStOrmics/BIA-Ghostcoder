@@ -1,6 +1,6 @@
-from .utils import *
-from .prompts import load_prompt_template
-from .config import TAVILY_MAX_RESULTS
+from ..utils import *
+from ..prompts import load_prompt_template
+from ..config import TAVILY_MAX_RESULTS
 
 
 

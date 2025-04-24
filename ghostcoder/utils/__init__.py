@@ -382,3 +382,45 @@ def webcontent_str_loader(web_url):
     
     # Return the concatenated page content (empty if all attempts failed)
     return page_content
+
+import inspect
+
+def get_variable_names(variables: list) -> list:
+    """
+    Returns a list of corresponding variable names in the global scope, based on the list of variable values entered.
+    If a value does not have a corresponding variable name in the global scope, None is returned.
+
+    Parameters:
+    variables (list): list containing the values of the variable.
+
+    Returns:
+    var_names: List containing the names of the variables. If a value has no corresponding variable name, then None.
+    """
+    # Get the local scope of the caller
+    caller_frame = inspect.currentframe().f_back
+    caller_locals = caller_frame.f_locals
+
+    # Getting global scopes
+    global_vars = globals()
+
+    # Initialize the result list
+    var_names = []
+
+    # Iterate through the list of input variable values
+    for value in variables:
+        # First check the local scope of the caller
+        for name, var in caller_locals.items():
+            if var is value:
+                var_names.append(name)
+                break
+        else:
+            # If not found in local scope, check global scope.
+            for name, var in global_vars.items():
+                if var is value:
+                    var_names.append(name)
+                    break
+            else:
+                # If it is not found in the global scope, add None.
+                var_names.append(None)
+
+    return var_names

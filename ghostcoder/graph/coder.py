@@ -1,6 +1,9 @@
-from .utils import *
-from .prompts import load_prompt_template
-from crawler import create_crawler_agent
+from ..utils import *
+from ..prompts import load_prompt_template
+from .crawler import create_crawler_agent
+
+import pandas as pd
+import anndata as ad
 
 from typing import TypedDict, Annotated, Optional, Type, Any
 import operator 
@@ -65,18 +68,23 @@ def create_coder_agent(
 
     # Get crawler subgraph 
     crawler_subgraph = create_crawler_agent(
-        chat_model, 
-        code_model,
-        max_retry = 3,
-        name: Optional[str] = "crawler_subgraph",
-        config_schema,
-        checkpointer,
-        store,
-        interrupt_before,
-        interrupt_after,
-        debug,
+        chat_model = chat_model, 
+        code_model = code_model,
+        max_retry = max_retry,
+        name =  "crawler_subgraph",
+        config_schema = config_schema,
+        checkpointer = checkpointer,
+        store = store,
+        interrupt_before = interrupt_before,
+        interrupt_after = interrupt_after,
+        debug = debug,
         )
 
+    #----------------
+    # Inital variables
+    #----------------
+    inputvars = None  
+    inputvars_backup = None
 
     #----------------
     # Define nodes
@@ -91,9 +99,7 @@ def create_coder_agent(
 
         # Pass inputs
         inputvar_names = state['inputvar_names']
-        data_perception = ""
-        # TODO: Implement actual data perception logic here
-        # For now, it's returning a placeholder 'data_perception
+        data_perception = data_perception(inputvar_names)
 
         return{
             'data_perception': data_perception
@@ -189,7 +195,7 @@ def create_coder_agent(
         # Generate critique with llm
         chain = code_model | JsonOutputParser
         i = 0
-        while i < obj.max_retry: 
+        while i < max_retry: 
             try:
                 response = chain.invoke(message)
                 critique_status = response['qualified']
@@ -216,21 +222,28 @@ def create_coder_agent(
         # Pass inputs
         generated_codeblock = state['generated_codeblock'][-1]
         inputvar_names = state['inputvar_names']
+        error_status = state['error_status']
         
         # Parse variables
-        inputvars = {name: globals()[name] for name in inputvar_names}
+        nonlocal inputvars, inputvars_backup
+        if not error_status:
+            # Backup initial input variables
+            inputvars = {name: globals()[name] for name in inputvar_names}
+            inputvars_backup = inputvars.copy()
 
         # Run in sandbox
         i = 0
         res = None
         while i < max_retry:
             try:
+                print('Testing generated code...')
                 res = trial_run(generated_codeblock, inputvars)
                 break
             except Exception as e:
                 i+=1
                 if i == max_retry:
                     print(f"Error generating code: {e}")
+        
         # Ensure res is not None to avoid later errors
         if res is None:
             res = {'output': '', 
@@ -238,11 +251,17 @@ def create_coder_agent(
                 'output_var': {}}
 
         # Parse output
+        print('Code tested.')
         execution_outstr = ""
         if isinstance(res['output'], str):
             execution_outstr += '## Execution output  \n'+res['output'] + '\n\n'
+            print('Code execution with output:\n'+res['output'])
         if isinstance(res['error'], str):
             execution_outstr += '## Execution error message  \n' +res['error'] + '\n\n'
+            print('!!! Code execution with ERROR:\n'+res['output'])
+
+        # Recover initial input variables 
+        inputvars = inputvars_backup.copy()
 
         return {
             'execution_outstr': execution_outstr
@@ -347,6 +366,7 @@ def create_coder_agent(
         i = 0
         while i < max_retry: 
             try:
+                print("Fixing error code.")
                 response = code_model.invoke(message)
                 code_block = extract_python_codeblock(response.content)
                 break
@@ -369,7 +389,6 @@ def create_coder_agent(
             'n_iter':n_iter
         }
 
-    
     #----------------
     # Define conditional edges
     #----------------
@@ -417,7 +436,7 @@ def create_coder_agent(
     builder.add_edge("Sandbox execution", "Output parser")
     builder.add_conditional_edges(
         "Output parser", 
-        router_is_error_occur
+        router_is_error_occur,
         {
             "websearch" : "Web search", 
             "errorfix"  : "Error fix", 
@@ -434,3 +453,67 @@ def create_coder_agent(
         debug=debug,
         name=name,
         )
+
+
+def describe_dataframe(var: pd.DataFrame) -> str:
+    """
+    Generate a natural language description of a pandas DataFrame.
+
+    Parameters:
+    var (pd.DataFrame): The DataFrame to describe.
+
+    Returns:
+    str: A string describing the DataFrame's structure and content.
+    """
+    desc = ""
+    desc += f"\nIt has {var.shape[0]} rows and {var.shape[1]} columns."
+    desc += f"\nColumn names: {', '.join(var.columns)}"
+    desc += f"\nData types:\n{var.dtypes.to_string()}"
+    desc += f"\nSummary statistics:\n{var.describe().to_string()}"
+    desc += f"\nFirst few rows:\n{var.head().to_string()}"
+    return desc
+
+def data_perception(var_names: list[str]) -> str:
+    """
+    Generate natural language descriptions for variables based on their names.
+
+    This function loads variables from the global scope using the provided names
+    and generates descriptions for them. For DataFrames and AnnData objects,
+    it provides detailed structural information.
+
+    Parameters:
+    var_names (list[str] or str): The name(s) of the variable(s) to describe.
+                                  If a single string is provided, it will be
+                                  treated as a list with one element.
+
+    Returns:
+    str: A string containing descriptions of all specified variables.
+    """
+    if isinstance(var_names, str):
+        var_names = [var_names]
+
+    prcp = ""
+    for name in var_names:
+        try:
+            var = globals()[name]
+        except KeyError:
+            prcp += f"Variable '{name}' cannot be allocated from global environment.\n"
+            continue
+
+        prcp += f"Variable '{name}' is a {type(var).__name__}:\n"
+        if isinstance(var, pd.DataFrame):
+            prcp += describe_dataframe(var)
+        elif isinstance(var, ad.AnnData):
+            prcp += f"\nIt has {var.n_obs} observations and {var.n_vars} variables."
+            if var.obs is not None and not var.obs.empty:
+                prcp += "\nFor its .obs:"
+                prcp += describe_dataframe(var.obs)
+            if var.var is not None and not var.var.empty:
+                prcp += "\nFor its .var:"
+                prcp += describe_dataframe(var.var)
+            if var.uns:
+                prcp += f"\nIts unstructured annotation (.uns): {list(var.uns.keys())}"
+        else:
+            prcp += f"{var}\n"
+
+    return prcp
