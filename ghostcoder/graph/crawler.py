@@ -67,7 +67,8 @@ def create_crawler_agent(
 
         # Call prompt template
         prompt, input_vars = load_prompt_template('gen_webquery')
-        
+        print(error_summary)
+
         # Construct input message
         message = [
             SystemMessage(content=prompt.format()),
@@ -75,11 +76,11 @@ def create_crawler_agent(
         ]
 
         # Generate web search query with llm
-        chain = chat_model | JsonOutputParser
+        chain = chat_model | JsonOutputParser()
         i = 0
         while i < max_retry: 
             try:
-                response = chat_model.invoke(message)
+                response = chain.invoke(message)
                 query_list = response['queries']
                 break
             except Exception as e:
@@ -113,6 +114,8 @@ def create_crawler_agent(
                 query_results += res['results']
             except:
                 print("Query with question '"+str(q)+"'... Failed.")
+
+        print(query_results)
 
         return {
             'query_results':query_results
@@ -150,7 +153,7 @@ def create_crawler_agent(
         ]
 
         # Filter web search with llm
-        chain = chat_model | JsonOutputParser
+        chain = chat_model | JsonOutputParser()
         i = 0
         while i < max_retry: 
             try:
@@ -241,7 +244,7 @@ def create_crawler_agent(
                     print(f"Error generating code: {e}")
 
         return {
-            'error_solution':response
+            'error_solution':response.content
         }
 
     #----------------

@@ -41,8 +41,11 @@ def create_ghostcoder_agent(
         #input
         task_description: str
         inputvar_names: list[str]
+        presis_add: str
+        data_perception: str
         previous_codeblock: str
         update_to: str
+        presis_add: str
 
         #parameter
         use_reg: bool
@@ -152,13 +155,14 @@ def create_ghostcoder_agent(
     def node_coding(state:State):
         """"""
 
-        print(state['inputvar_names'])
         # Pass inputs
         coder_input = {
             "task_instruction"  : state['task_instruction'],
             "ref_codeblocks"    : state['ref_codeblocks'],
             "previous_codeblock": state['previous_codeblock'],
             "inputvar_names"    : state['inputvar_names'],
+            "presis_add"        : state['presis_add'],
+            "data_perception"   : state['data_perception'],
             }
 
         # Generate bioinformatics code with coder subgraph

@@ -1,8 +1,10 @@
 import io
 import re
+import os
 import json
 import copy
 import builtins
+import pickle
 import inspect
 import numpy as np
 import pandas as pd
@@ -388,45 +390,76 @@ def webcontent_str_loader(web_url):
     return page_content
 
 
-def get_variable_names(variables: list) -> list:
-    """
-    Returns a list of corresponding variable names in the global scope, based on the list of variable values entered.
-    If a value does not have a corresponding variable name in the global scope, None is returned.
+# def permanent_input_vars(variables: list) -> dict:
+#     """"""
+#     global_vars = globals()
+#     locala_vars = locals()
 
+#     # Initialize the result list
+#     var_names = []
+
+#     # Iterate through the list of input variable values
+#     for value in variables:
+#         var_name = None # Initial with None
+#         # First check the local scope of the caller
+#         for name, var in locala_vars.items():
+#             if var is value:
+#                 var_name = name
+#         # If not found in local scope, check global scope.
+#         if var_name is None:
+#             for name, var in global_vars.items():
+#                 if var is value:
+#                     var_name = name
+#                     break
+#         var_names.append(var_name)
+
+#     current_dir = os.getcwd()
+#     temp_dir = os.path.join(current_dir,'temp')
+#     if not os.path.exists(temp_dir):
+#         os.mkdir(temp_dir)
+    
+#     pickle_file_dir = temp_dir+'/input_vars.pkl'
+
+#     with open(pickle_file_dir, 'wb') as f:
+#         pickle.dump(variables, f)
+
+#     input_wrap = {"var_names": var_names,
+#                      "persis_add": }
+
+#     return input_wrap
+    
+
+
+def permanent_input_vars(variables: list) -> dict:
+    """
+    Saves the given list of variables to a pickle file in a temporary directory.
+    
+    This function creates a 'temp' directory in the current working directory if it doesn't exist,
+    and saves the list of variables to a file named 'input_vars.pkl' in that directory.
+    
     Parameters:
-    variables (list): list containing the values of the variable.
-
+    variables (list): The list of variables to save.
+    
     Returns:
-    var_names: List containing the names of the variables. If a value has no corresponding variable name, then None.
+    str: The path to the pickle file.
     """
-    # Get the local scope of the caller
-    caller_frame = inspect.currentframe().f_back
-    caller_locals = caller_frame.f_locals
 
-    # Getting global scopes
-    global_vars = globals()
+    # Create a temporary directory to store the pickle file if it doesn't exist
+    current_dir = os.getcwd()
+    temp_dir = os.path.join(current_dir, 'temp')
+    if not os.path.exists(temp_dir):
+        os.mkdir(temp_dir)
+    
+    # Define the path for the pickle file
+    pickle_file_path = os.path.join(temp_dir, 'input_vars.pkl')
+    
+    # Save the list of variables to the pickle file
+    with open(pickle_file_path, 'wb') as f:
+        pickle.dump(variables, f)
+    
+    # Return a dictionary with the variable names and the pickle file path
+    return  pickle_file_path 
 
-    print(global_vars)
-
-    # Initialize the result list
-    var_names = []
-
-    # Iterate through the list of input variable values
-    for value in variables:
-        var_name = None # Initial with None
-        # First check the local scope of the caller
-        for name, var in caller_locals.items():
-            if var is value:
-                var_name = name
-        # If not found in local scope, check global scope.
-        if var_name is None:
-            for name, var in global_vars.items():
-                if var is value:
-                    var_name = name
-                    break
-        var_names.append(var_name)
-
-    return var_names
 
 def describe_dataframe(var: pd.DataFrame) -> str:
     """
@@ -446,37 +479,30 @@ def describe_dataframe(var: pd.DataFrame) -> str:
     desc += f"\nFirst few rows:\n{var.head().to_string()}"
     return desc
 
-def data_observation(var_names: list[str]) -> str:
+def data_observation(variables:list, var_names:list) -> str:
     """
-    Generate natural language descriptions for variables based on their names.
-
-    This function loads variables from the global scope using the provided names
-    and generates descriptions for them. For DataFrames and AnnData objects,
-    it provides detailed structural information.
-
+    Generate descriptions for a list of variables.
+    
+    This function creates a string that describes each variable in the list,
+    including its name, type, and additional details if it's a DataFrame or AnnData object.
+    
     Parameters:
-    var_names (list[str] or str): The name(s) of the variable(s) to describe.
-                                  If a single string is provided, it will be
-                                  treated as a list with one element.
-
+    variables (list): List of variables to describe.
+    var_names (list): List of names corresponding to the variables.
+    
     Returns:
-    str: A string containing descriptions of all specified variables.
+    str: A string containing descriptions of each variable.
     """
-    if isinstance(var_names, str):
-        var_names = [var_names]
+    if len(variables) != len(var_names):
+        return "Error with data observation, wrong paries"
 
     prcp = ""
-    for name in var_names:
-        try:
-            var = globals()[name]
-        except KeyError:
-            prcp += f"Variable '{name}' cannot be allocated from global environment.\n"
-            continue
-
-        prcp += f"Variable '{name}' is a {type(var).__name__}:\n"
+    for i in range(len(variables)):
+        var= variables[i]
+        prcp += f"Variable '{var_names[i]}' is a {type(var).__name__}:\n"
         if isinstance(var, pd.DataFrame):
             prcp += describe_dataframe(var)
-        elif isinstance(var, ad.AnnData):
+        elif isinstance(var, AnnData):
             prcp += f"\nIt has {var.n_obs} observations and {var.n_vars} variables."
             if var.obs is not None and not var.obs.empty:
                 prcp += "\nFor its .obs:"
@@ -490,3 +516,63 @@ def data_observation(var_names: list[str]) -> str:
             prcp += f"{var}\n"
 
     return prcp
+
+
+
+def input_variable_wrapper(variables):
+    """
+    Wraps the input variables by finding their names, saving them to a pickle file,
+    and generating a description.
+    
+    This function uses introspection to find the names of the variables passed to it,
+    saves them to a temporary pickle file, and generates a description using data_observation.
+    
+    Parameters:
+    variables: List of variables to wrap.
+    
+    Returns:
+    dict: A dictionary containing the variable names, the path to the pickle file,
+          and the description of the variables.
+    """
+
+    # Get the caller's frame to access its local and global variables
+    caller_frame = inspect.currentframe().f_back
+    if caller_frame is None:
+        raise RuntimeError("No caller frame found")
+    
+    caller_locals = caller_frame.f_locals
+    caller_globals = caller_frame.f_globals
+    
+    # Initialize list to hold variable names and set to track used names
+    var_names = []
+    used_names = set()
+    
+    for value in variables:
+        # First, look for unused names in caller's locals that match the value
+        local_candidates = [name for name, var in caller_locals.items() if var is value and name not in used_names]
+        if local_candidates:
+            var_name = local_candidates[0]  # Pick the first matching name
+        else:
+            # If not found in locals, look in caller's globals
+            global_candidates = [name for name, var in caller_globals.items() if var is value and name not in used_names]
+            if global_candidates:
+                var_name = global_candidates[0]
+            else:
+                var_name = "unknown"  # If no matching name is found
+        var_names.append(var_name) 
+        if var_name != "unknown":
+            used_names.add(var_name)  # Mark the name as used
+
+    # Create the wrapper dictionary
+    wrap_dict = {}
+    wrap_dict['var_names'] = var_names
+
+    # Save variables to local file
+    pickle_file_path = permanent_input_vars(variables)
+    wrap_dict['persis_add'] = pickle_file_path
+
+    # Get variable description
+    perception  = data_observation(variables,var_names)
+    wrap_dict['perception'] = perception
+
+    return wrap_dict

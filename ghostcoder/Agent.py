@@ -79,34 +79,33 @@ class GhostCoder:
     def Run(
         self,
         task: str,
-        input_vars: list[Any],
+        input_warp: dict,
         update_to: str = "Global", # or local
         previous_codeblock: str = "",
         use_reg: bool = True,
         ):
         """
         """
-        
+
         # Pass parameters
         self.task = task
-        self.input_vars = input_vars 
+        self.inputvar_names = input_warp['var_names']
+        self.persis_add = input_warp['persis_add']
+        self.data_perception = input_warp['perception']
         self.update_to = update_to
         self.previous_codeblock = previous_codeblock
         self.use_reg = use_reg
 
-        
-        # Parse input variables
-        self.inputvar_names = get_variable_names(input_vars)
-        print(self.input_vars)
-        print(self.inputvar_names)
-        
         # Pass agent input
         agent_input = {
             "task_description": self.task,
             "inputvar_names": self.inputvar_names,
+            "presis_add": self.persis_add,
+            "data_perception": self.data_perception,
             "previous_codeblock": self.previous_codeblock,
             "update_to": self.update_to,
             "use_reg": self.use_reg,
+            
             }
         
         # Run agent

@@ -2,8 +2,7 @@ from ..utils import *
 from ..prompts import load_prompt_template
 from .crawler import create_crawler_agent
 
-import pandas as pd
-import anndata as ad
+import pickle
 
 from typing import TypedDict, Annotated, Optional, Type, Any
 import operator 
@@ -46,6 +45,8 @@ def create_coder_agent(
         ref_codeblocks: str
         previous_codeblock: str
         inputvar_names: list[str]
+        data_perception: str
+        presis_add: str
 
         #parameter
         n_iter: int
@@ -55,7 +56,6 @@ def create_coder_agent(
         websearch: bool
 
         #generated
-        data_perception: str
         generated_codeblock: Annotated[list[str], operator.add]
         critique: str
         execution_outstr: str
@@ -81,12 +81,6 @@ def create_coder_agent(
         )
 
     #----------------
-    # Inital variables
-    #----------------
-    inputvars = None  
-    inputvars_backup = None
-
-    #----------------
     # Define nodes
     #----------------
     
@@ -99,7 +93,7 @@ def create_coder_agent(
 
         # Pass inputs
         inputvar_names = state['inputvar_names']
-        data_perception = data_observation(inputvar_names)
+        data_perception = state['data_perception']
 
         return{
             'data_perception': data_perception
@@ -227,39 +221,35 @@ def create_coder_agent(
 
         # Pass inputs
         generated_codeblock = state['generated_codeblock'][-1]
+        presis_add = state['presis_add']
         inputvar_names = state['inputvar_names']
-        
+    
         print(generated_codeblock)
-        print(inputvar_names)
+        
+        # Load input variables 
+        with open(presis_add, 'rb') as f:
+            inputvars = pickle.load(f)
 
-        # Initial parameters
-        try: 
-            error_status = state['error_status']
-        except :
-            error_status = False
-        # Parse variables
-        nonlocal inputvars, inputvars_backup
-        inputvars = {name: globals()[name] for name in inputvar_names}
-        if not error_status:
-            # Backup initial input variables
-            inputvars_backup = inputvars.copy()
-        else:
-            inputvars = inputvars_backup.copy()
+        # Parse input variables
+        var_dict = {}
+        for i in range(len(inputvar_names)):
+            var_dict[inputvar_names[i]] = inputvars[i]
 
-        print(inputvars)
         # Run in sandbox
         i = 0
         res = None
         while i < max_retry:
             try:
                 print('Testing generated code...')
-                res = trial_run(generated_codeblock, inputvars)
+                res = trial_run(generated_codeblock, var_dict)
                 break
             except Exception as e:
                 i+=1
                 if i == max_retry:
                     print(f"Error generating code: {e}")
         
+        print(res)
+
         # Ensure res is not None to avoid later errors
         if res is None:
             res = {'output': '', 
@@ -274,10 +264,7 @@ def create_coder_agent(
             print('Code execution with output:\n'+res['output'])
         if isinstance(res['error'], str):
             execution_outstr += '## Execution error message  \n' +res['error'] + '\n\n'
-            print('!!! Code execution with ERROR:\n'+res['output'])
-
-        # Recover initial input variables 
-        inputvars = inputvars_backup.copy()
+            print('!!! Code execution with ERROR:\n'+res['error'])
 
         return {
             'execution_outstr': execution_outstr
@@ -340,7 +327,7 @@ def create_coder_agent(
             config = config_schema
         )
 
-        error_solution = subgraph_states['subgraph_states']
+        error_solution = subgraph_states['error_solution']
         return {
             "error_solution":error_solution
         }
@@ -356,7 +343,10 @@ def create_coder_agent(
         # Pass inputs
         error_summary = state['error_summary']
         generated_codeblock = state['generated_codeblock'][-1]
-        error_solution = state['error_solution']
+        try:
+            error_solution = state['error_solution']
+        except:
+            error_solution = ""
         data_perception = state['data_perception']
         try:
             n_error = state['n_error']
@@ -403,7 +393,7 @@ def create_coder_agent(
         n_iter -= 1
 
         return {
-            'generated_codeblock':code_block, 
+            'generated_codeblock':[code_block], 
             'n_error':n_error,
             'n_iter':n_iter
         }
