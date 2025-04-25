@@ -44,8 +44,11 @@ def create_rag_agent(
     #----------------
 
     def node_fake(state:State):
+        task_description = state['task_description']
+        if len(task_description)>0:
+            ref_codeblocks = ""
         return {
-            ref_codeblocks: ""
+            "ref_codeblocks": ref_codeblocks
         }
     
     #----------------

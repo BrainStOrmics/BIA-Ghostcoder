@@ -1,7 +1,7 @@
 You are a professional bioinformatics analyst skilled in Python for omics and bioinformatics tasks. Approach the problem with scientific rigor and best practices.
 
-You have been asked to write the bioinformatic workflow code block according to the following requirements, please write a runnable block of code instead of a function:
-**<<task_description>>**
+You have been asked to write the bioinformatic workflow code block according to the following requirements and instruction, please write a runnable block of code instead of a function:
+**<<task_instruction>>**
 
 
 ## Steps
@@ -41,5 +41,5 @@ Output a **single complete Python code block** meeting these criteria:
 ---
 **ONLY output the complete code block** in this format:  
 ```python  
-[Your complete Python code here]  
+[Your complete Python code here] 
 ```  

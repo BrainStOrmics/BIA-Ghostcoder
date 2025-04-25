@@ -3,6 +3,7 @@ import re
 import json
 import copy
 import builtins
+import inspect
 import numpy as np
 import pandas as pd
 from typing import Dict, Any
@@ -246,8 +247,11 @@ def extract_python_codeblock(context: str) -> list:
     # Clean up each code block by removing leading and trailing whitespace
     code_blocks = [block.strip() for block in code_blocks]
 
+    # Merge all code blocks into a single string with newline separators
+    merged_code = "\n".join(code_blocks)
+
     # Return the list of extracted code blocks
-    return code_blocks
+    return merged_code
 
 
 def parse_json(s: str) -> dict:
@@ -383,7 +387,6 @@ def webcontent_str_loader(web_url):
     # Return the concatenated page content (empty if all attempts failed)
     return page_content
 
-import inspect
 
 def get_variable_names(variables: list) -> list:
     """
@@ -403,24 +406,87 @@ def get_variable_names(variables: list) -> list:
     # Getting global scopes
     global_vars = globals()
 
+    print(global_vars)
+
     # Initialize the result list
     var_names = []
 
     # Iterate through the list of input variable values
     for value in variables:
+        var_name = None # Initial with None
         # First check the local scope of the caller
         for name, var in caller_locals.items():
             if var is value:
-                var_names.append(name)
-                break
-        else:
-            # If not found in local scope, check global scope.
+                var_name = name
+        # If not found in local scope, check global scope.
+        if var_name is None:
             for name, var in global_vars.items():
                 if var is value:
-                    var_names.append(name)
+                    var_name = name
                     break
-            else:
-                # If it is not found in the global scope, add None.
-                var_names.append(None)
+        var_names.append(var_name)
 
     return var_names
+
+def describe_dataframe(var: pd.DataFrame) -> str:
+    """
+    Generate a natural language description of a pandas DataFrame.
+
+    Parameters:
+    var (pd.DataFrame): The DataFrame to describe.
+
+    Returns:
+    str: A string describing the DataFrame's structure and content.
+    """
+    desc = ""
+    desc += f"\nIt has {var.shape[0]} rows and {var.shape[1]} columns."
+    desc += f"\nColumn names: {', '.join(var.columns)}"
+    desc += f"\nData types:\n{var.dtypes.to_string()}"
+    desc += f"\nSummary statistics:\n{var.describe().to_string()}"
+    desc += f"\nFirst few rows:\n{var.head().to_string()}"
+    return desc
+
+def data_observation(var_names: list[str]) -> str:
+    """
+    Generate natural language descriptions for variables based on their names.
+
+    This function loads variables from the global scope using the provided names
+    and generates descriptions for them. For DataFrames and AnnData objects,
+    it provides detailed structural information.
+
+    Parameters:
+    var_names (list[str] or str): The name(s) of the variable(s) to describe.
+                                  If a single string is provided, it will be
+                                  treated as a list with one element.
+
+    Returns:
+    str: A string containing descriptions of all specified variables.
+    """
+    if isinstance(var_names, str):
+        var_names = [var_names]
+
+    prcp = ""
+    for name in var_names:
+        try:
+            var = globals()[name]
+        except KeyError:
+            prcp += f"Variable '{name}' cannot be allocated from global environment.\n"
+            continue
+
+        prcp += f"Variable '{name}' is a {type(var).__name__}:\n"
+        if isinstance(var, pd.DataFrame):
+            prcp += describe_dataframe(var)
+        elif isinstance(var, ad.AnnData):
+            prcp += f"\nIt has {var.n_obs} observations and {var.n_vars} variables."
+            if var.obs is not None and not var.obs.empty:
+                prcp += "\nFor its .obs:"
+                prcp += describe_dataframe(var.obs)
+            if var.var is not None and not var.var.empty:
+                prcp += "\nFor its .var:"
+                prcp += describe_dataframe(var.var)
+            if var.uns:
+                prcp += f"\nIts unstructured annotation (.uns): {list(var.uns.keys())}"
+        else:
+            prcp += f"{var}\n"
+
+    return prcp

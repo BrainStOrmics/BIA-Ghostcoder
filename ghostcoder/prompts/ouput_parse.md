@@ -44,7 +44,7 @@ A piece of code executes and produces output, please analyze the code execution 
 Please respond in the following **json** format:
 ```json
 {
-   "error occurs": bool, // If there is any error occurs when excute the code；
+   "error occurs": bool, // If there is any error occurs when execute the code,`True` or `False`.
    "error": str, // Generalized error information, as well as extracted error details, if there is no error here fill in the "" (an empty str).
-   "need web search": bool // Whether or not to fix this issue requires a web search.
+   "need web search": bool // Whether or not to fix this issue requires a web search, `True` or `False`.
 }

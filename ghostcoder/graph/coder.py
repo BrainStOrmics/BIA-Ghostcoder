@@ -10,7 +10,7 @@ import operator
 #langchain
 from langchain_core.language_models import LanguageModelLike
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.output_parsers import  JsonOutputParser
+from langchain_core.output_parsers import JsonOutputParser
 #langgraph
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.graph import CompiledGraph
@@ -56,7 +56,7 @@ def create_coder_agent(
 
         #generated
         data_perception: str
-        generated_codeblock: Annotated[str, operator.add]
+        generated_codeblock: Annotated[list[str], operator.add]
         critique: str
         execution_outstr: str
         error_summary: str
@@ -99,7 +99,7 @@ def create_coder_agent(
 
         # Pass inputs
         inputvar_names = state['inputvar_names']
-        data_perception = data_perception(inputvar_names)
+        data_perception = data_observation(inputvar_names)
 
         return{
             'data_perception': data_perception
@@ -116,9 +116,15 @@ def create_coder_agent(
         task_instruction = state['task_instruction']
         data_perception = state['data_perception']
         previous_codeblock = state['previous_codeblock']
-        generated_codeblock = state['generated_codeblock'][-1]
         ref_codeblocks = state['ref_codeblocks']
-        n_iter = state[n_iter]
+        try:
+            n_iter = state[n_iter]
+        except:
+            n_iter = 0
+        try:
+            generated_codeblock = state['generated_codeblock'][-1]
+        except:
+            generated_codeblock = ""
 
         # Parse human input
         human_input = "## Input Variables and I/O   \nThe current code block serves the following variables:\n" + data_perception + '\n'
@@ -141,7 +147,7 @@ def create_coder_agent(
 
         # Construct input message
         message = [
-            SystemMessage(content=prompt.format(task_description = task_instruction)),
+            SystemMessage(content=prompt.format(task_instruction = task_instruction)),
             HumanMessage(content=human_input)
         ]
 
@@ -165,7 +171,7 @@ def create_coder_agent(
         n_iter += 1
             
         return {
-            'generated_codeblock':code_block,
+            'generated_codeblock':[code_block],
             'n_iter':n_iter
         }
 
@@ -177,7 +183,7 @@ def create_coder_agent(
         """
 
         # Pass inputs
-        task_instruction = state['task_description']
+        task_instruction = state['task_instruction']
         generated_codeblock = state['generated_codeblock'][-1]
 
         # Parse human input
@@ -188,25 +194,25 @@ def create_coder_agent(
 
         # Construct input message
         message = [
-            SystemMessage(content=prompt.format(task_description = task_instruction)),
+            SystemMessage(content=prompt.format(task_instruction = task_instruction)),
             HumanMessage(content=human_input)
         ]
 
         # Generate critique with llm
-        chain = code_model | JsonOutputParser
+        chain = code_model | JsonOutputParser()
         i = 0
         while i < max_retry: 
             try:
-                response = chain.invoke(message)
-                critique_status = response['qualified']
-                critique = response['self-critique report']
+                json_output = chain.invoke(message)
+                critique_status = json_output['qualified']
+                critique = json_output['self-critique report']
                 critique = critique_report_2md(critique)
                 break
             except Exception as e:
                 i+=1
                 if i == max_retry:
-                    print(f"Error generating code: {e}")
-            
+                    print(f"Error generating critique due to: \n{e}")
+
         return {
             'critique_status':critique_status, 
             'critique': critique
@@ -222,15 +228,25 @@ def create_coder_agent(
         # Pass inputs
         generated_codeblock = state['generated_codeblock'][-1]
         inputvar_names = state['inputvar_names']
-        error_status = state['error_status']
         
+        print(generated_codeblock)
+        print(inputvar_names)
+
+        # Initial parameters
+        try: 
+            error_status = state['error_status']
+        except :
+            error_status = False
         # Parse variables
         nonlocal inputvars, inputvars_backup
+        inputvars = {name: globals()[name] for name in inputvar_names}
         if not error_status:
             # Backup initial input variables
-            inputvars = {name: globals()[name] for name in inputvar_names}
             inputvars_backup = inputvars.copy()
+        else:
+            inputvars = inputvars_backup.copy()
 
+        print(inputvars)
         # Run in sandbox
         i = 0
         res = None
@@ -342,7 +358,10 @@ def create_coder_agent(
         generated_codeblock = state['generated_codeblock'][-1]
         error_solution = state['error_solution']
         data_perception = state['data_perception']
-        n_error = state['n_error']
+        try:
+            n_error = state['n_error']
+        except:
+            n_error = 0
         n_iter = state['n_iter']
 
         # Parse human input
@@ -453,67 +472,3 @@ def create_coder_agent(
         debug=debug,
         name=name,
         )
-
-
-def describe_dataframe(var: pd.DataFrame) -> str:
-    """
-    Generate a natural language description of a pandas DataFrame.
-
-    Parameters:
-    var (pd.DataFrame): The DataFrame to describe.
-
-    Returns:
-    str: A string describing the DataFrame's structure and content.
-    """
-    desc = ""
-    desc += f"\nIt has {var.shape[0]} rows and {var.shape[1]} columns."
-    desc += f"\nColumn names: {', '.join(var.columns)}"
-    desc += f"\nData types:\n{var.dtypes.to_string()}"
-    desc += f"\nSummary statistics:\n{var.describe().to_string()}"
-    desc += f"\nFirst few rows:\n{var.head().to_string()}"
-    return desc
-
-def data_perception(var_names: list[str]) -> str:
-    """
-    Generate natural language descriptions for variables based on their names.
-
-    This function loads variables from the global scope using the provided names
-    and generates descriptions for them. For DataFrames and AnnData objects,
-    it provides detailed structural information.
-
-    Parameters:
-    var_names (list[str] or str): The name(s) of the variable(s) to describe.
-                                  If a single string is provided, it will be
-                                  treated as a list with one element.
-
-    Returns:
-    str: A string containing descriptions of all specified variables.
-    """
-    if isinstance(var_names, str):
-        var_names = [var_names]
-
-    prcp = ""
-    for name in var_names:
-        try:
-            var = globals()[name]
-        except KeyError:
-            prcp += f"Variable '{name}' cannot be allocated from global environment.\n"
-            continue
-
-        prcp += f"Variable '{name}' is a {type(var).__name__}:\n"
-        if isinstance(var, pd.DataFrame):
-            prcp += describe_dataframe(var)
-        elif isinstance(var, ad.AnnData):
-            prcp += f"\nIt has {var.n_obs} observations and {var.n_vars} variables."
-            if var.obs is not None and not var.obs.empty:
-                prcp += "\nFor its .obs:"
-                prcp += describe_dataframe(var.obs)
-            if var.var is not None and not var.var.empty:
-                prcp += "\nFor its .var:"
-                prcp += describe_dataframe(var.var)
-            if var.uns:
-                prcp += f"\nIts unstructured annotation (.uns): {list(var.uns.keys())}"
-        else:
-            prcp += f"{var}\n"
-
-    return prcp

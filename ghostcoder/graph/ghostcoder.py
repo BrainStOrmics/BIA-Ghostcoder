@@ -114,7 +114,7 @@ def create_ghostcoder_agent(
         i = 0
         while i < max_retry:
             try:
-                response = chat_llm.invoke(message)
+                response = chat_model.invoke(message)
                 break
             except Exception as e:
                 i+=1
@@ -143,7 +143,7 @@ def create_ghostcoder_agent(
             config = config_schema)
         
         # Pass output
-        ref_codeblocks = rager_states['rager_states']
+        ref_codeblocks = rager_states['ref_codeblocks']
 
         return {
             "ref_codeblocks":ref_codeblocks,
@@ -152,18 +152,13 @@ def create_ghostcoder_agent(
     def node_coding(state:State):
         """"""
 
+        print(state['inputvar_names'])
         # Pass inputs
         coder_input = {
             "task_instruction"  : state['task_instruction'],
             "ref_codeblocks"    : state['ref_codeblocks'],
             "previous_codeblock": state['previous_codeblock'],
             "inputvar_names"    : state['inputvar_names'],
-            #parameters
-            "n_iter"              : 0,
-            "n_error"             : 0,
-            #initial input
-            "generated_codeblock" : "",
-            "error_status": False,
             }
 
         # Generate bioinformatics code with coder subgraph

@@ -1,5 +1,7 @@
 from .utils import *
 from .graph import create_ghostcoder_agent
+from .config import TAVILY_MAX_RESULTS
+
 
 from typing import Type, Optional, Any
 #langchain
@@ -12,7 +14,6 @@ from langgraph.store.base import BaseStore
 #plot graph
 from IPython.display import Image, display
 from langgraph.types import Checkpointer
-
 
 class GhostCoder:
     """
@@ -75,7 +76,7 @@ class GhostCoder:
             print(f'GhostCoder failed to initiate dueWW to:\n{e}')
         
     
-    def run(
+    def Run(
         self,
         task: str,
         input_vars: list[Any],
@@ -93,8 +94,11 @@ class GhostCoder:
         self.previous_codeblock = previous_codeblock
         self.use_reg = use_reg
 
+        
         # Parse input variables
         self.inputvar_names = get_variable_names(input_vars)
+        print(self.input_vars)
+        print(self.inputvar_names)
         
         # Pass agent input
         agent_input = {
@@ -115,4 +119,12 @@ class GhostCoder:
         return codeblock, exe_out
     
     def draw_graph(self):
-        display(Image(self.graph.get_graph(xray=1).draw_mermaid_png()))
+        i = 0 
+        while i < self.max_try:
+            try:
+                display(Image(self.graph.get_graph(xray=1).draw_mermaid_png()))
+                break
+            except Exception as e:
+                i += 1
+                if i == self.max_try:
+                    print(f"Error draw agent due to: \n{e}")
