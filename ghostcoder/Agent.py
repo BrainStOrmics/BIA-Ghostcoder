@@ -79,7 +79,7 @@ class GhostCoder:
     def Run(
         self,
         task: str,
-        input_warp: dict,
+        input_wrap: dict,
         update_to: str = "Global", # or local
         previous_codeblock: str = "",
         use_reg: bool = True,
@@ -89,9 +89,9 @@ class GhostCoder:
 
         # Pass parameters
         self.task = task
-        self.inputvar_names = input_warp['var_names']
-        self.persis_add = input_warp['persis_add']
-        self.data_perception = input_warp['perception']
+        self.inputvar_names = input_wrap['var_names']
+        self.persis_add = input_wrap['persis_add']
+        self.data_perception = input_wrap['perception']
         self.update_to = update_to
         self.previous_codeblock = previous_codeblock
         self.use_reg = use_reg
@@ -105,7 +105,6 @@ class GhostCoder:
             "previous_codeblock": self.previous_codeblock,
             "update_to": self.update_to,
             "use_reg": self.use_reg,
-            
             }
         
         # Run agent
