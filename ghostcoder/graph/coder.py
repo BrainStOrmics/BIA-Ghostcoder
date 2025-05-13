@@ -1,8 +1,7 @@
 from ..utils import *
 from ..prompts import load_prompt_template
-from .crawler import create_crawler_agent
-
-import pickle
+from .webcrawler import create_crawler_agent
+from ..config import *
 
 from typing import TypedDict, Annotated, Optional, Type, Any
 import operator 
@@ -44,8 +43,11 @@ def create_coder_agent(
         task_instruction: str 
         ref_codeblocks: str
         previous_codeblock: str
-        inputvar_names: list[str]
         data_perception: str
+        env_profiles: str
+
+        inputvar_names: list[str]
+        
         presis_add: str
 
         #parameter
@@ -60,12 +62,12 @@ def create_coder_agent(
         critique: str
         execution_outstr: str
         error_summary: str
+        web_summary: str
         error_solution: str
 
     #----------------
     # Load subgraphs
     #----------------
-
     # Get crawler subgraph 
     crawler_subgraph = create_crawler_agent(
         chat_model = chat_model, 
@@ -79,25 +81,23 @@ def create_coder_agent(
         interrupt_after = interrupt_after,
         debug = debug,
         )
+    
+    executor_subgraph = create_executor_agent(
+        chat_model = chat_model, 
+        code_model = code_model,
+        max_retry = max_retry,
+        name =  "executor_subgraph",
+        config_schema = config_schema,
+        checkpointer = checkpointer,
+        store = store,
+        interrupt_before = interrupt_before,
+        interrupt_after = interrupt_after,
+        debug = debug,
+        )
 
     #----------------
     # Define nodes
     #----------------
-    
-    def node_data_perception(state:State):
-        """
-        This function is responsible for perceiving data based on the current state.
-        It extracts variable names from the state and returns them as part of the data perception.
-        Note: The actual 'data_perception' logic is not implemented here and should be defined elsewhere.
-        """
-
-        # Pass inputs
-        inputvar_names = state['inputvar_names']
-        data_perception = state['data_perception']
-
-        return{
-            'data_perception': data_perception
-        }
 
     def node_code_generation(state:State):
         """
@@ -111,37 +111,69 @@ def create_coder_agent(
         data_perception = state['data_perception']
         previous_codeblock = state['previous_codeblock']
         ref_codeblocks = state['ref_codeblocks']
+        env_profiles = state['env_profiles']
         try:
             n_iter = state[n_iter]
         except:
             n_iter = 0
+        
+        try:
+            error_status = state['error_status']
+            error_summary = state['error_summary']
+        except:
+            error_status = False
+
         try:
             generated_codeblock = state['generated_codeblock'][-1]
         except:
             generated_codeblock = ""
 
+        try:
+            critique = state['critique']
+        except:
+            critique = ""
+
+        try: 
+            error_solution = state['error_solution']
+        except:
+            error_solution = ""
+
         # Parse human input
-        human_input = "## Input Variables and I/O   \nThe current code block serves the following variables:\n" + data_perception + '\n'
-
-        # For continued workflow
-        if len(previous_codeblock) > 0:
-            human_input += "\nThe previous code in the workflow to which the current code belongs is as follows, please use the same coding style as it:\n" + previous_codeblock
+        human_input = "## Data  \nThe current code block serves the following data files:\n" + data_perception + '\n'
         
-        # For iterated code generation
-        elif len(generated_codeblock) > 0:
-            human_input += "\n## Iterative code generation  \nThe code you generated for the above task is as follows, please modify and enhance it according to the instructions above:\n" + generated_codeblock
+        # For error fix
+        if error_status:
+            human_input += "## Error fix  \nYour previously code had the following error:\n" + error_summary + "\n"
+            human_input += "## Your code  \nThe code you generated for the above task is as follows, fix those error:\n" + generated_codeblock + "\n"
+            if len(web_summary) > 0:
+                human_input += "## Fix solution  \nFollowing are web searched solutions to help with fix above errors:\n" + error_solution
 
-        # When RAG is available 
-        if len(ref_codeblocks) > 0:
-            few_shots = "## Reference code blocks\nSome code blocks you can refer to that accomplish similar tasks, but the specific details may differ from this task:\n" + ref_codeblocks
-            human_input += few_shots
+        # For iterated code generation with critique
+        elif len(critique) > 0:
+            human_input += "\n## Critique  \nUsers think your code has the following defects:  \n"+ critique +"\n"
+            human_input += "## Your code  \nThe code you generated for the above task is as follows, please modify and enhance it according to the instructions above.\n" + generated_codeblock
+
+        else:
+            # For continued workflow, 1st iteration 
+            if len(previous_codeblock) > 0:
+                human_input += "\nThe previous code in the workflow to which the current code belongs is as follows, please use the same coding style as it:\n" + previous_codeblock
+
+            # When RAG is available 
+            if len(ref_codeblocks) > 0:
+                few_shots = "## Reference code blocks\nSome code blocks you can refer to that accomplish similar tasks, but the specific details may differ from this task:\n" + ref_codeblocks
+                human_input += few_shots
+
 
         # Call prompt template
-        prompt, input_vars = load_prompt_template('script_gen')
+        prompt, input_vars = load_prompt_template('coder.script_gen')
 
         # Construct input message
         message = [
-            SystemMessage(content=prompt.format(task_instruction = task_instruction)),
+            SystemMessage(content=prompt.format(
+                task_instruction = task_instruction,
+                output_dir = OUTPUT_DIR+'/',
+                figure_dir = FIGURE_DIR+'/',
+                )),
             HumanMessage(content=human_input)
         ]
 
@@ -184,7 +216,7 @@ def create_coder_agent(
         human_input = "## Codes to be evaluated  \nThe code you generated for the above task is as follows, please conduct an evaluation:\n" + generated_codeblock
 
         # Call prompt template
-        prompt, input_vars = load_prompt_template('critisim')
+        prompt, input_vars = load_prompt_template('coder.critisim')
 
         # Construct input message
         message = [
@@ -213,58 +245,25 @@ def create_coder_agent(
         }
 
 
-    def node_sandbox_run(state:State):
+    def node_executor(state:State):
         """
-        Runs the generated code block in a sandbox environment with provided input variables.
-        Returns the execution output string, which includes both the output and any error messages.
         """
 
         # Pass inputs
-        generated_codeblock = state['generated_codeblock'][-1]
-        presis_add = state['presis_add']
-        inputvar_names = state['inputvar_names']
-    
-        print(generated_codeblock)
+        subgraph_input = {
+            "generated_codeblock":state['generated_codeblock'],
+            "env_profiles":state['env_profiles']
+        }
+
+
+        # Invoke executor subgraph 
+        subgraph_states = executor_subgraph.invoke(
+            subgraph_input,
+            config = config_schema
+        )
         
-        # Load input variables 
-        with open(presis_add, 'rb') as f:
-            inputvars = pickle.load(f)
-
-        # Parse input variables
-        var_dict = {}
-        for i in range(len(inputvar_names)):
-            var_dict[inputvar_names[i]] = inputvars[i]
-
-        # Run in sandbox
-        i = 0
-        res = None
-        while i < max_retry:
-            try:
-                print('Testing generated code...')
-                res = trial_run(generated_codeblock, var_dict)
-                break
-            except Exception as e:
-                i+=1
-                if i == max_retry:
-                    print(f"Error generating code: {e}")
-        
-        print(res)
-
-        # Ensure res is not None to avoid later errors
-        if res is None:
-            res = {'output': '', 
-                'error': 'Execution failed without any result', 
-                'output_var': {}}
-
-        # Parse output
-        print('Code tested.')
-        execution_outstr = ""
-        if isinstance(res['output'], str):
-            execution_outstr += '## Execution output  \n'+res['output'] + '\n\n'
-            print('Code execution with output:\n'+res['output'])
-        if isinstance(res['error'], str):
-            execution_outstr += '## Execution error message  \n' +res['error'] + '\n\n'
-            print('!!! Code execution with ERROR:\n'+res['error'])
+        # Parse subgraph results
+        execution_outstr = subgraph_states['execution_results']
 
         return {
             'execution_outstr': execution_outstr
@@ -284,7 +283,7 @@ def create_coder_agent(
         human_input = "The code excuted with folloing outputs:\n" + execution_outstr
 
         # Call prompt template
-        prompt, input_vars = load_prompt_template('ouput_parse')
+        prompt, input_vars = load_prompt_template('coder.ouput_parse')
 
         # Construct input message
         message = [
@@ -313,12 +312,15 @@ def create_coder_agent(
             'error_summary':error_summary
         }
     
-    def node_websearch_subgraph(state:State):
+    def node_webcrawler(state:State):
         # Pass inputs
-        subgraph_input = {
-            "generated_codeblock":state['generated_codeblock'],
-            "error_summary":state['error_summary']
+        generated_codeblock = state['generated_codeblock'][-1]
+        error_summary = state['error_summary']
+        query_context = "I am experiencing the following problem with the execution of my code:\n" + error_summary
+        query_context += "\n\nMy code as follow:\n" + generated_codeblock
 
+        subgraph_input = {
+            "query context": query_context
         }
 
         # Get error fix web search solution by subgraph
@@ -327,14 +329,16 @@ def create_coder_agent(
             config = config_schema
         )
 
-        error_solution = subgraph_states['error_solution']
+        # Parse result
+        summary = subgraph_states['summary']
+        
         return {
-            "error_solution":error_solution
+            "web_summary":summary
         }
 
         
 
-    def node_error_fixer(state:State):
+    def node_debugger(state:State):
         """
         This function fixes errors in the generated code using information from data perception
         and potentially web solutions. It updates the generated code and iteration counters.
@@ -344,10 +348,12 @@ def create_coder_agent(
         error_summary = state['error_summary']
         generated_codeblock = state['generated_codeblock'][-1]
         try:
-            error_solution = state['error_solution']
+            web_summary = state['web_summary']
         except:
-            error_solution = ""
+            web_summary = ""
+
         data_perception = state['data_perception']
+
         try:
             n_error = state['n_error']
         except:
@@ -359,11 +365,11 @@ def create_coder_agent(
         human_input += "## Data information  \n" + data_perception +"\n\n"
         human_input += "## Error message  \nThe error message and related information as follow:" +"\n---\n"
         human_input += error_summary +"\n---\n"
-        if len(error_solution)>1:
-            human_input += "## Web solution  \nSearching through the web, the recommended solutions are as follows:" +"\n---\n" + error_solution
+        if len(web_summary)>1:
+            human_input += "## Web solution  \nSearching through the web, the recommended solutions are as follows:" +"\n---\n" + web_summary
 
         # Call prompt template
-        prompt, input_vars = load_prompt_template('gen_fixsolut')
+        prompt, input_vars = load_prompt_template('coder.gen_fixsolut')
 
         # Construct input message
         message = [
@@ -377,23 +383,18 @@ def create_coder_agent(
             try:
                 print("Fixing error code.")
                 response = code_model.invoke(message)
-                code_block = extract_python_codeblock(response.content)
                 break
             except Exception as e:
                 i+=1
                 if i == max_retry:
                     print(f"Error generating code: {e}")
         
-        # Handle failure after maximum retries
-        if code_block is None:
-            raise RuntimeError("Failed to fix code after maximum retries.")
-
         # Update iteration 
         n_error += 1
         n_iter -= 1
 
         return {
-            'generated_codeblock':[code_block], 
+            'error_solution':response.content, 
             'n_error':n_error,
             'n_iter':n_iter
         }
@@ -424,35 +425,32 @@ def create_coder_agent(
     # initial builder
     builder = StateGraph(State, config_schema = config_schema)
     # add nodes
-    builder.add_node("Data perception", node_data_perception)
     builder.add_node("Code generation", node_code_generation)
     builder.add_node("Criticism",node_criticism)
-    builder.add_node("Sandbox execution",node_sandbox_run)
+    builder.add_node("Executor",node_executor)
     builder.add_node("Output parser",node_output_parser)
-    builder.add_node("Web search",node_websearch_subgraph)
-    builder.add_node("Error fix",node_error_fixer)
+    builder.add_node("Webcrawler",node_webcrawler)
+    builder.add_node("Consultant",node_debugger)
     # add edges
-    builder.add_edge(START, "Data perception")
-    builder.add_edge("Data perception","Code generation")
+    builder.add_edge(START,"Code generation")
     builder.add_edge("Code generation", "Criticism")
     builder.add_conditional_edges(
         "Criticism", 
         router_is_codeblock_qualified,
         {
-            "continue"  : "Sandbox execution", 
+            "continue"  : "Executor", 
             "regen"     : "Code generation"}
         )
-    builder.add_edge("Sandbox execution", "Output parser")
+    builder.add_edge("Executor", "Output parser")
     builder.add_conditional_edges(
         "Output parser", 
         router_is_error_occur,
         {
-            "websearch" : "Web search", 
-            "errorfix"  : "Error fix", 
+            "websearch" : "Webcrawler", 
+            "errorfix"  : "Consultant", 
             "end"       : END}
         )
-    builder.add_edge("Web search","Error fix")
-    builder.add_edge("Error fix", "Sandbox execution")
+    builder.add_edge("Webcrawler","Consultant")
     
     return builder.compile(
         checkpointer=checkpointer,

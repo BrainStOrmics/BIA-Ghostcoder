@@ -1,6 +1,8 @@
-from .utils import *
-from .graph import create_ghostcoder_agent
-from .config import TAVILY_MAX_RESULTS
+import ghostcoder
+from ghostcoder.utils import *
+from ghostcoder.graph import create_ghostcoder_agent
+from ghostcoder.config import *
+
 
 
 from typing import Type, Optional, Any
@@ -80,6 +82,7 @@ class GhostCoder:
         self,
         task: str,
         input_wrap: dict,
+        task_id: str = "test",
         update_to: str = "Global", # or local
         previous_codeblock: str = "",
         use_reg: bool = True,
@@ -89,6 +92,8 @@ class GhostCoder:
 
         # Pass parameters
         self.task = task
+        self.task_id = task_id
+        ghostcoder.config.TASK_ID = self.task_id
         self.inputvar_names = input_wrap['var_names']
         self.persis_add = input_wrap['persis_add']
         self.data_perception = input_wrap['perception']
