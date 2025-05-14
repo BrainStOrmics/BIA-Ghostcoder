@@ -28,9 +28,9 @@ Please respond in the following **json** format:
   "language": str, // The programming language used in this code
   "use_docker": bool, // A boolean indicating whether to use Docker (`true`) or a native environment (`false`),
   "docker_image": str, // The name(full name with tag, e.g. python:latest) of the Docker image to use if `use_docker` is `true`. Otherwise, an empty string (`""`).
-  "need_wrapped": bool, // A boolean indicating whether the code needs to be wrapped (e.g., saved as a file and executed via a bash script, such as R scripts saved as `.R` files), note that do not wrap python scripts.
+  "need_wrapped": bool, // A boolean indicating whether the code needs to be saved as a file and executed via a bash script (such as R scripts saved as `.R` files), note that do not wrap python or bash scripts.
   "script_file" str, // Script file name for wrapped code for bash command to run. If no warp needed, return  empty string (`""`).
-  "bash_cmd": str,  // If `is_wrapped` is `true`, provide the bash command script to execute the code (e.g. `Rscript test.R` ). Otherwise, an empty string (`""`). If no warp needed, return  empty string (`""`).
+  "bash_cmd": str,  // Provide the bash command to execute the wrapped code in syntax-highlighted code block format (e.g. `Rscript test.R` ). Otherwise, an empty string (`""`).
 }
 
 

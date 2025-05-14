@@ -1,6 +1,7 @@
 from ..utils import *
 from ..prompts import load_prompt_template
 from ..config import *
+from .coder import create_coder_agent
 from ..docker import *
 
 import docker
@@ -88,13 +89,14 @@ def create_filemanager_agent(
         task_id = state['task_id']
 
         # Check work dir
-        work_data_dir = os.path.join(WORK_DIR,DATA_INPUT_DIR)
-        task_dir = os.path.join(WORK_DIR,task_id)
+        work_data_dir = os.path.join(file_config.WORK_DIR,file_config.INPUT_DATA_DIR)
+
+        task_dir = os.path.join(file_config.WORK_DIR,task_id)
         if not check_dir_exists(task_dir):
             create_dir(task_dir)
-        task_data_dir = os.path.join(task_dir, DATA_DIR)
-        task_fig_dir = os.path.join(task_dir, FIGURE_DIR)
-        task_output_dir = os.path.join(task_dir, FIGURE_DIR)
+        task_data_dir = os.path.join(task_dir, file_config.DATA_DIR)
+        task_fig_dir = os.path.join(task_dir, file_config.FIGURE_DIR)
+        task_output_dir = os.path.join(task_dir, file_config.OUTPUT_DIR)
         for dir_ in [task_data_dir, task_fig_dir, task_output_dir]:
             if not check_dir_exists(dir_):
                 create_dir(dir_)
@@ -110,7 +112,6 @@ def create_filemanager_agent(
 
         # Copy data 
         data_files = copy_files(work_data_dir,task_data_dir)
-        
 
         return {
             "data_files": data_files,
@@ -139,12 +140,12 @@ def create_filemanager_agent(
             if profile_tags in all_loaded_tags:
                 docker_status_str += profile_str
         # Pass to env_profiles 
-        env_profiles['Docker status'] = docker_status_str
+        env_profiles['docker status'] = docker_status_str
 
         # Get native env profiles 
         native_env_profile = get_native_env_perception()
         # Pass to env_profiles 
-        env_profiles['Native env languages'] = "Language installed in native env and their versions are:\n"+str(native_env_profile) + "\n"
+        env_profiles['native env languages'] = "Language installed in native env and their versions are:\n"+str(native_env_profile) + "\n"
 
         return {
             "env_profiles": env_profiles,
@@ -158,10 +159,16 @@ def create_filemanager_agent(
         """
 
         # Pass inputs
-        data_perc_reflex = state['data_perc_reflex'][:-1]
+        try:
+            data_perc_reflex = state['data_perc_reflex'][:-1]
+        except:
+            data_perc_reflex = ""
         env_profiles = state['env_profiles']
         data_files = state['data_files']
-        n_iter = state['n_iter']
+        try:
+            n_iter = state['n_iter']
+        except:
+            n_iter = 0
 
         # Parse reflex
         if len(data_perc_reflex) > 0:
@@ -171,14 +178,14 @@ def create_filemanager_agent(
             reflex_str = ""
 
         # Parse human input
-        human_input = "## Data files:  \n" + data_files + "\n" + reflex_str
+        human_input = "## Data files:  \n" + str(data_files) + "\n" + reflex_str
 
-        # Parse data file description
-        data_desc_file_path =  os.path.join(env_profiles['data_dir'],'data_description.txt')
-        if os.path.exists(data_desc_file_path):
-            with open(data_desc_file_path,"r", encoding="utf-8-sig") as f:
-                data_desc = f.read()
-            human_input += "### The description of (some of the) above data files as follow:  \n" + data_desc
+        # # Parse data file description
+        # data_desc_file_path =  os.path.join(env_profiles['task_dirs']['data_dir'],'data_description.txt')
+        # if os.path.exists(data_desc_file_path):
+        #     with open(data_desc_file_path,"r", encoding="utf-8-sig") as f:
+        #         data_desc = f.read()
+        #     human_input += "### The description of (some of the) above data files as follow:  \n" + data_desc
 
         # Call prompt template
         prompt, input_vars = load_prompt_template('filemanager.data_prec')
@@ -209,7 +216,7 @@ def create_filemanager_agent(
         }
     
 
-    def node_subgraph_coder(state:State):
+    async def node_subgraph_coder(state:State):
         """"""
 
         # Pass inputs
@@ -217,9 +224,10 @@ def create_filemanager_agent(
         env_profiles = state['env_profiles']
 
         # Invoke coder subgraph to get data perception
-        coder_fin_state = coder_subgraph.invoke(
+        coder_fin_state = await coder_subgraph.ainvoke(
             {
                 "task_instruction" : data_perc_task, 
+                "data_perception": "Your task is to percept input data.",
                 "previous_codeblock" : "",
                 "ref_codeblocks" : [],
                 "env_profiles" : env_profiles,

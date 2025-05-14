@@ -5,14 +5,14 @@
          "tag": "py39r45",
          "description": "Includes analysis process tools for mainstream single cells, supporting scanpy-based python and Seurat-based R analysis processes.",
          "languages": "Python, R, Bash",
-         "packages": "scanpy, seurat v5, monocl2, monocl3" // Packages with version well be a plus, but not required.
+         "packages": "scanpy, seurat v5, monocl2, monocl3" 
       },
       {
          "name": "python",
          "tag": "latest",
          "description":"Basic python environment, does not contain any packages.",
          "languages": "Python, Bash",
-         "packages": "None specific" // if no specific packages pre-installed, leave it blank or anything is fine.
+         "packages": "None specific" 
       },
       {
          "name": "r-base",

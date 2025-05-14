@@ -3,24 +3,26 @@ import os
 # Tool configuration
 TAVILY_MAX_RESULTS = 7
 MAX_SPILT_ITER = 8
-TASK_ID = 'task_id_test'
 
 current_file_path  = os.path.abspath(__file__)
 
 # For docker
-DOCKER_PROFILES_DIR = current_file_path[:-9]+'docker'
-DEFAULT_DOCKER_PROFILE = 'BIA_dockers.json'
-NEW_DOCKER_PROFILE = 'docker_images.json'
+class docker_config:
+    DOCKER_PROFILES_DIR = current_file_path[:-9]+'docker'
+    DEFAULT_DOCKER_PROFILE = 'BIA_dockers.json'
+    NEW_DOCKER_PROFILE = 'docker_images.json'
+
 
 # For file management 
-WORK_DIR = './work'
-INPUT_DATA_DIR = 'data'
-# task file
-DATA_DIR = 'data'
-FIGURE_DIR = 'figures'
-OUTPUT_DIR = 'results'
+class file_config:
+    #TASK_ID = 'task_id_test'
+    WORK_DIR = './work'
+    INPUT_DATA_DIR = 'data'
+    # task file
+    DATA_DIR = 'data'
+    FIGURE_DIR = 'figures'
+    OUTPUT_DIR = 'results'
 
-# For env perception
 
 # For main graph
 DB_RETRIEVE = True  

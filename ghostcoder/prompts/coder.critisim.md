@@ -9,11 +9,12 @@ You are now required to clarify the user's needs again and check that the code y
 ## Coding Guidelines
 ---
 Adhere strictly to these rules: 
-- **FORBID system command execution** (e.g., `os.system`)  
-- **FORBID file deletion operations** (e.g., `os.remove`)
-- **PREFER bioinformatics libraries** (e.g., Biopython, scanpy)  
-- **Test-Driven Implementation** (Generate test cases and validate them: e.g. assert 'n_genes_by_counts' in adata.obs.)
-- **Unique coding style** (Uniform variable naming and commenting with previous code block)
+ - **Programming Language ONLY** (Reject any natural language in a form other than comments)
+ - **FORBID system command execution** (e.g., `os.system`)  
+ - **FORBID file deletion operations** (e.g., `os.remove`)
+ - **PREFER bioinformatics libraries** (e.g., Biopython, scanpy)  
+ - **Test-Driven Implementation** (Generate test cases and validate them: e.g. assert 'n_genes_by_counts' in adata.obs.)
+ - **Unique coding style** (Uniform variable naming and commenting with previous code block)
 
 
 ## Output format

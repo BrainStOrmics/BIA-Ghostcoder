@@ -1,5 +1,6 @@
 import os 
 import shutil
+import subprocess
 from ghostcoder.config import *
 
 def file_management(task_id:str):
@@ -80,7 +81,7 @@ def get_version(command):
 def get_native_env_perception():
     languages = [
         {"name": "Python", "command": ["python", "--version"]},
-        {"name": "Python3", "command": ["python3", "--version"]},
+        #{"name": "Python3", "command": ["python3", "--version"]},
         {"name": "R", "command": ["R", "--version"]},
         {"name": "Java", "command": ["java", "-version"]},
         {"name": "C++", "command": ["g++", "--version"]},

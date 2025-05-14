@@ -9,6 +9,63 @@ from anndata._core.anndata import AnnData
 from pandas.core.frame import DataFrame
 from contextlib import redirect_stdout, redirect_stderr
 
+def extract_code_blocks(markdown_text: str) -> list[str]:
+    """
+    Extract the content of all code blocks from a Markdown text.
+
+    This function identifies code blocks that start and end with three backticks (```)
+    and extracts their internal code content. It ignores the language specifier
+    (e.g., ```python or ```r) and only keeps the original text within the code blocks.
+
+    Args:
+        markdown_text (str): A string containing Markdown-formatted text.
+
+    Returns:
+        list[str]: A list of strings, each being the content of a code block, preserving original line breaks.
+    """
+    # Split the input Markdown text into lines for easier processing
+    lines = markdown_text.split('\n')
+    in_code_block = False
+    # Flag to track whether we are currently inside a code block
+    in_code_block = False
+    
+    # List to store the extracted code blocks
+    code_blocks = []
+    
+    # Temporary list to collect lines of the current code block
+    current_block = []
+    
+    # Iterate through each line
+    for line in lines:
+        # Check if the line starts with ```
+        if line.startswith('```'):
+            # If already inside a code block, this is the end marker
+            if in_code_block:
+                # Join the collected lines into a single string and add to code_blocks
+                code_blocks.append('\n'.join(current_block))
+                # Reset the current block for the next code block
+                current_block = []
+                # Set the flag to False, indicating we are no longer in a code block
+                in_code_block = False
+            else:
+                # If not inside a code block, this is the start marker
+                # Set the flag to True, indicating we are now in a code block
+                in_code_block = True
+        elif in_code_block:
+            # If inside a code block and the line does not start with ```, add it to the current block
+            current_block.append(line)
+    
+    # Handle the case where the text ends without closing the code block
+    # If still in a code block after processing all lines, add the last collected lines
+    if in_code_block:
+        code_blocks.append('\n'.join(current_block))
+    
+    # Return the list of extracted code blocks
+    return code_blocks
+
+
+
+"""OLD VERSION below, no longer in use"""
 def compare_anndata(adata_1: AnnData, adata_2: AnnData) -> bool:
     """
     Compare two AnnData objects for equality across all key attributes.

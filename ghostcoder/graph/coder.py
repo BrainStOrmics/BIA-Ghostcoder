@@ -1,6 +1,7 @@
 from ..utils import *
 from ..prompts import load_prompt_template
 from .webcrawler import create_crawler_agent
+from .executor import create_executor_agent
 from ..config import *
 
 from typing import TypedDict, Annotated, Optional, Type, Any
@@ -45,10 +46,6 @@ def create_coder_agent(
         previous_codeblock: str
         data_perception: str
         env_profiles: str
-
-        inputvar_names: list[str]
-        
-        presis_add: str
 
         #parameter
         n_iter: int
@@ -171,8 +168,8 @@ def create_coder_agent(
         message = [
             SystemMessage(content=prompt.format(
                 task_instruction = task_instruction,
-                output_dir = OUTPUT_DIR+'/',
-                figure_dir = FIGURE_DIR+'/',
+                output_dir = file_config.OUTPUT_DIR+'/',
+                figure_dir = file_config.FIGURE_DIR+'/',
                 )),
             HumanMessage(content=human_input)
         ]
@@ -182,7 +179,8 @@ def create_coder_agent(
         while i < max_retry:
             try:
                 response = code_model.invoke(message)
-                code_block = extract_python_codeblock(response.content)
+                #code_block = extract_python_codeblock(response.content) # No longer limited to python code anymore
+                code_block = response.content
                 break
             except Exception as e:
                 i+=1
@@ -192,7 +190,7 @@ def create_coder_agent(
         # Handle failure after maximum retries
         if code_block is None:
             raise RuntimeError("Failed to generate code after maximum retries.")
-
+        
         # Update iteration 
         n_iter += 1
             
@@ -245,19 +243,25 @@ def create_coder_agent(
         }
 
 
-    def node_executor(state:State):
+    async def node_executor(state:State):
         """
         """
 
         # Pass inputs
+        generated_codeblock = state['generated_codeblock'][-1]
+        env_profiles = state['env_profiles']
+
+        # Parse code block to fit with autogen executors
+        code_blocks = extract_code_blocks(generated_codeblock)
+
+        # Parse input
         subgraph_input = {
-            "generated_codeblock":state['generated_codeblock'],
-            "env_profiles":state['env_profiles']
+            "generated_codeblock": code_blocks[0], # ONLY use 1st code block
+            "env_profiles": env_profiles
         }
 
-
         # Invoke executor subgraph 
-        subgraph_states = executor_subgraph.invoke(
+        subgraph_states = await executor_subgraph.ainvoke(
             subgraph_input,
             config = config_schema
         )

@@ -48,13 +48,13 @@ def create_executor_agent(
 
         #generated
         language: str
-        use_docker: str
+        use_docker: bool
         docker_image: str
-        need_wrapped: str
+        need_wrapped: bool
         bash_cmd: str
         script_file: str
         
-        execution_results: strs
+        execution_results: str
 
 
     #----------------
@@ -73,10 +73,10 @@ def create_executor_agent(
         prompt, input_vars = load_prompt_template('executor.router')
 
         # Parse human input
-        human_input = "## Code block to execute:  \n" +  generated_codeblock
+        human_input = "## Code block to execute:  \n" +  generated_codeblock + "\n"
         human_input += "## Runtime environment profiles:\n"
-        human_input += "### Native environment" + env_profiles['Native env languages'] + "\n"
-        human_input += "### Docker images: \n" +  env_profiles['Docker status'] + "\n"
+        human_input += "### Native environment" + str(env_profiles['native env languages']) + "\n"
+        human_input += "### Docker images: \n" +  env_profiles['docker status'] + "\n"
 
         # Construct input message
         message = [
@@ -85,7 +85,7 @@ def create_executor_agent(
         ]
 
         # Chose code run env by llm
-        chain = chat_model | JsonOutputParser()
+        chain = code_model | JsonOutputParser()
         i = 0
         while i < max_retry: 
             try:
@@ -93,7 +93,7 @@ def create_executor_agent(
                 # Parse outputs
                 language = json_output['language']
                 use_docker = json_output['use_docker']
-                docker_image = json_output['use_docker']
+                docker_image = json_output['docker_image']
                 need_wrapped = json_output['need_wrapped']
                 script_file = json_output['script_file']
                 bash_cmd = json_output['bash_cmd']
@@ -110,8 +110,8 @@ def create_executor_agent(
             "use_docker": use_docker,
             "docker_image": docker_image,
             "need_wrapped": need_wrapped,
-            "bash_cmd": bash_cmd,
             "script_file": script_file,
+            "bash_cmd": bash_cmd,
         }
 
     def node_script_wrapper(state:State):
@@ -121,7 +121,7 @@ def create_executor_agent(
         generated_codeblock = state['generated_codeblock']
         script_file = state['script_file']
         env_profiles = state['env_profiles']
-        target_file_path = os.path.join(env_profiles['task_dir'], script_file)
+        target_file_path = os.path.join(env_profiles['task_dirs']['task_dir'], script_file)
 
         # Write to script file, 
         #--------
@@ -133,7 +133,7 @@ def create_executor_agent(
         return{
         }
 
-    def node_cmd_execute(state:State):
+    async def node_cmd_execute(state:State):
         """
         """
 
@@ -151,11 +151,18 @@ def create_executor_agent(
 
         # Parse code to run directly
         if need_wrapped:
+            if bash_cmd.startswith("```"):
+                # Parse bash cmd
+                bash_cmd = extract_code_blocks(bash_cmd)[0]
             exe_code = bash_cmd
-            language = "bash"
+            use_language = "bash"
         else:
             exe_code = generated_codeblock
-
+            use_language = language
+        
+        #print(exe_code)
+        #print(use_docker)
+        #print(docker_image)
         # Call executor
         if use_docker:
             try:
@@ -164,6 +171,7 @@ def create_executor_agent(
                     timeout = 60, 
                     work_dir= task_dir, # Use the task main dir to store the code files.
                     #bind_dir="./", # Path inside the docker
+                    delete_tmp_files  = True,
                 )   
             except Exception as e:
                 print(f"Error create docker cmd executor due to: \n{e}")
@@ -182,19 +190,23 @@ def create_executor_agent(
                 exe_result = await executor.execute_code_blocks(
                     code_blocks = [
                         CodeBlock(
-                            language = language,
+                            language = use_language,
                             code = exe_code,
                         )
                     ],
                     cancellation_token=CancellationToken(),
                 )
+        except Exception as e:
+            print(f"Error executor code due to: \n{e}")
 
         # Parse execution result
-        exit_code = exe_result.exit_code
         output = exe_result.output
-        #execution_results = "Code executed with exit code "+ str(exit_code) +"\n"
         execution_results = "Code executed with output:\n" + output + "\n"
+        #exit_code = exe_result.exit_code
+        #execution_results = "Code executed with exit code "+ str(exit_code) +"\n"
         
+        print(execution_results)
+
         return{
             'execution_results': execution_results,
         }
@@ -224,7 +236,7 @@ def create_executor_agent(
     builder.add_edge(START, "Env parser")
     builder.add_conditional_edges(
         "Env parser", 
-        router_is_codeblock_qualified,
+        router_wrap,
         {               
             "wrapper"   : "Wrapper", 
             "execute"   : "Executor"}

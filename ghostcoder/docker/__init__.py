@@ -1,7 +1,6 @@
 import os
 import docker
 import json
-
 import docker.errors
 from ..config import *
 
@@ -10,8 +9,8 @@ from ..config import *
 
 
 def load_docker_profiles():
-    default_profile_path = os.path.join(DOCKER_PROFILES_DIR,DEFAULT_DOCKER_PROFILE)
-    new_profile_path = os.path.join(DOCKER_PROFILES_DIR,NEW_DOCKER_PROFILE)
+    default_profile_path = os.path.join(docker_config.DOCKER_PROFILES_DIR,docker_config.DEFAULT_DOCKER_PROFILE)
+    new_profile_path = os.path.join(docker_config.DOCKER_PROFILES_DIR,docker_config.NEW_DOCKER_PROFILE)
     if os.path.exists(new_profile_path):
         profile_path = new_profile_path
     else:
@@ -31,6 +30,24 @@ def check_docker_exists(
         if img.tags == target_tags:
             return True
     return False
+
+def get_docker_status():
+    docker_status_str = "Loaded dockers are:\n"
+    docker_profiles = load_docker_profiles()
+    docker_images = docker.from_env().images.list()
+    all_loaded_tags = []
+    for img in docker_images:
+        all_loaded_tags.append(img.tags[0]) 
+    for profile in docker_profiles['Docker images']:
+        profile_tags = profile['name']+':'+profile['tag']
+        profile_str = "docker name: " + profile_tags + "\n"
+        profile_str += "docker description: " + profile['description'] + "\n"
+        profile_str += "supported language: " + profile['languages'] + "\n"
+        profile_str += "pre-installed packages: " + profile['packages'] + "\n"
+        if profile_tags in all_loaded_tags:
+            docker_status_str += profile_str
+    return docker_status_str
+
 
 
 def add_docker_image_profile(
@@ -66,7 +83,7 @@ def add_docker_image_profile(
         print("New docker profile added.")
 
     # Write new profiles
-    new_profile_path = os.path.join(DOCKER_PROFILES_DIR,NEW_DOCKER_PROFILE)
+    new_profile_path = os.path.join(docker_config.DOCKER_PROFILES_DIR,docker_config.NEW_DOCKER_PROFILE)
     with open(new_profile_path, 'w') as f:
         json.dump(docker_profiles, f, indent=2)
     if verbose:

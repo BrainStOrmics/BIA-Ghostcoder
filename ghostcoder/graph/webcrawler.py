@@ -62,10 +62,10 @@ def create_crawler_agent(
         query_context = state['query_context']
 
         # Parse human input
-        human_input = "## The content of the search target is as follows:  \n" + query_context 
+        human_input = "##  The content of the search purpose:  \n" + query_context 
 
         # Call prompt template
-        prompt, input_vars = load_prompt_template('gen_webquery')
+        prompt, input_vars = load_prompt_template('crawler.gen_webquery')
 
         # Construct input message
         message = [
@@ -140,11 +140,11 @@ def create_crawler_agent(
             i+=1
 
         # Parse human input
-        human_input = "## The content of the search target is as follows:  \n" + query_context + '\n\n'
+        human_input = "## The content of the search purpose:  \n" + query_context + '\n\n'
         human_input += query_str
 
         # Call prompt template
-        prompt, input_vars = load_prompt_template('filter_webpage')
+        prompt, input_vars = load_prompt_template('crawler.filter_webpage')
         
         # Construct input message
         message = [
@@ -187,7 +187,7 @@ def create_crawler_agent(
         useful_results = state['useful_results']
         
         # Crawl from url
-        crawled_webs = "## Web-based information on related issues:  \n---\n"
+        crawled_webs = "## Crawled web pages:  \n---\n"
         j = 0
         for res in useful_results:
             i = 0 
@@ -220,11 +220,11 @@ def create_crawler_agent(
         crawled_webs = state['crawled_webs']
         
         # Parse human input
-        human_input = "## The content of the search target is as follows: \n" + query_context + "\n\n"
+        human_input = "## The content of the search purpose: \n" + query_context + "\n\n"
         human_input += crawled_webs
         
         # Call prompt template
-        prompt, input_vars = load_prompt_template('gen_websummary')
+        prompt, input_vars = load_prompt_template('crawler.gen_websummary')
         
         # Construct input message
         message = [
