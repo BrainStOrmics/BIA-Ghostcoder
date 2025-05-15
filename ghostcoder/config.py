@@ -1,7 +1,16 @@
 import os
 
-# Tool configuration
-TAVILY_MAX_RESULTS = 7
+# For Tavily
+class tavily_config:
+    API_KEY = ""
+    MAX_RESULTS = 7
+
+# For webcrawler subgraph
+class crawler_config:
+    PRINT_WEBSEARCH_RES = False
+    PRINT_WEBPAGE = False
+    N_TOP_RES = 5
+
 MAX_SPILT_ITER = 8
 
 current_file_path  = os.path.abspath(__file__)
@@ -27,9 +36,7 @@ class file_config:
 # For main graph
 DB_RETRIEVE = True  
 
-# For webcrawler subgraph
-PRINT_WEBSEARCH_RES = False
-PRINT_WEBPAGE = False
+
 
 # For retiever subgraph
 DATABASES = [

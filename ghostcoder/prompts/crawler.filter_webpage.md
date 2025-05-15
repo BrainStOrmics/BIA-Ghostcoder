@@ -10,7 +10,7 @@ Based on the search query target provide later, filter the results to include on
 
 ## Output Format 
 ---
-Please Return indexes of top 5 results in the following **json** format: 
+Please Return indexes of top <<n_top_res>> results in the following **json** format: 
 ```json
    {
      "selected_indexes": [index_1, index_2, index_3, ...] //index is int

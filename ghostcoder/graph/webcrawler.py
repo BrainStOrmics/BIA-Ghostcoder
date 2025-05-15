@@ -1,6 +1,6 @@
 from ghostcoder.utils import *
 from ghostcoder.prompts import load_prompt_template
-from ghostcoder.config import TAVILY_MAX_RESULTS
+from ghostcoder.config import tavily_config, crawler_config
 from ..config import *
 
 
@@ -98,10 +98,14 @@ def create_crawler_agent(
 
         # Pass inputs
         query_list = state['query_list']
-
+        
+        # Set up Tavily key
+        if not isinstance(os.environ.get("TAVILY_API_KEY"),str):
+            os.environ["TAVILY_API_KEY"] = tavily_config.API_KEY
+        
         # Call Tavily search 
         websearch = TavilySearch(
-            max_results=TAVILY_MAX_RESULTS,
+            max_results=tavily_config.MAX_RESULTS,
             topic="general",)
 
         # Get web query
@@ -113,7 +117,7 @@ def create_crawler_agent(
             except:
                 print("Query with question '"+str(query)+"'... Failed.")
         
-        if PRINT_WEBSEARCH_RES:
+        if crawler_config.PRINT_WEBSEARCH_RES:
             print(query_results)
 
         return {
@@ -148,7 +152,8 @@ def create_crawler_agent(
         
         # Construct input message
         message = [
-            SystemMessage(content=prompt.format()),
+            SystemMessage(content=prompt.format(
+                n_top_res = str(crawler_config.N_TOP_RES))),
             HumanMessage(content=human_input)
         ]
 
@@ -194,7 +199,7 @@ def create_crawler_agent(
             while i < max_retry:
                 try:
                     web_content = webcontent_str_loader(res['url'])
-                    if PRINT_WEBPAGE:
+                    if crawler_config.PRINT_WEBPAGE:
                         print(web_content)
                     res['fullpage_content'] = web_content
                     crawled_webs += "### Page "+str(j)+ ":  \n"
