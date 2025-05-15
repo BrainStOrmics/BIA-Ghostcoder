@@ -19,11 +19,11 @@ You are an expert in data analysis. Your task is to critique the perception resu
 3. Provide Feedback:
    - If the perception results fully capture the file’s structure and content with no major issues, set `"qualified"` to `True` and summarize what was done well in `"self-critique"`.
    - If there are gaps or inaccuracies, set `"qualified"` to `False` and provide detailed suggestions for improvement in `"self-critique"`.
-   - 
+
 
 ## Output Format:
 ```json
 {
-   "qualified": bool, // `True` if the perception results are adequate, `False` if major corrections are needed.
+   "qualified": bool, // `true` if the perception results are adequate, `false` if **major** corrections are needed.
    "self-critique": str // Improvement suggestions or confirmation of adequacy. 
 }

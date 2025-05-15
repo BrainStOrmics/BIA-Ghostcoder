@@ -54,10 +54,10 @@ def create_filemanager_agent(
         data_files: list[str]
         env_profiles: dict
         data_perc_task: Annotated[list[str], operator.add]
-        data_perc_codes: Annotated[list[str], operator.add]
+        data_perc_code: str
         data_perc: str
-        data_perc_reflex: str
-        data_perc_status: str
+        qualified: str
+        reflex: str
 
     #----------------
     # Load subgraphs
@@ -209,6 +209,33 @@ def create_filemanager_agent(
         data_perc_task = state['data_perc_task'][-1]
         env_profiles = state['env_profiles']
 
+        # Output example
+        output_example = """
+
+### Example format for output print:
+
+Data dir: data/adata_raw.h5ad
+Data perception:
+    Format: annodata
+    Details:
+        Expression matrix shape: (8000, 22738)
+        Keys in obs: ['patient_id','tissue','diease']
+        Keys in var: ['gene_ids']
+    Provided description:
+        This is single cell RNAseq data collected from NCLC patients and health construct, from lung and other cancer metastatic sites.
+
+Data dir: data/metadata_table.csv
+Data preception:
+    Format: csv
+    Details:
+        Columns: patient information include: patient id, tissue, age, gender, stage.
+        Rows: each row is a patient.
+    Provided description:
+        Not provide
+        """
+
+        data_perc_task += output_example
+
         # Invoke coder subgraph to get data perception
         coder_fin_state = await coder_subgraph.ainvoke(
             {
@@ -222,10 +249,10 @@ def create_filemanager_agent(
         
         # Parse data perception
         data_perc = coder_fin_state['execution_outstr']
-        data_perc_code = coder_fin_state['generated_codeblock']
+        data_perc_code = coder_fin_state['generated_codeblock'][-1]
         return {
             "data_perc": data_perc,
-            "data_perc_codes" : [data_perc_code],  
+            "data_perc_code" : data_perc_code,  
         }
 
 
@@ -233,15 +260,21 @@ def create_filemanager_agent(
         """"""
 
         # Pass inputs
-        data_perc_task = state['data_perc_task'][-1]
-        env_profiles = state['env_profiles']
+        data_perc_code = state['data_perc_code']
+        data_perc = state['data_perc']
         data_files = state['data_files'] 
 
         # Call prompt template
         prompt, input_vars = load_prompt_template('filemanager.data_reflex')
 
+        # Parse human input
+        human_input = "## The data perception results in last round are as follows:\n" + data_perc + "\n"
+        human_input += "By following code:\n" + str(data_perc_code)+ "\n"
+        
+
         message = [
             SystemMessage(content=prompt.format(target_files = data_files)),
+            HumanMessage(content=human_input)
         ]
 
         # Generate critique with llm
@@ -250,8 +283,8 @@ def create_filemanager_agent(
         while i < max_retry: 
             try:
                 response = chain.invoke(message)
-                data_perc_status = response['qualified']
-                data_perc_reflex = response['self-critique']
+                qualified = response['qualified']
+                reflex = response['self-critique']
                 break
             except Exception as e:
                 i+=1
@@ -259,8 +292,9 @@ def create_filemanager_agent(
                     print(f"Error critque data perception due to: \n{e}")
 
         return {
-            "data_perc_reflex": data_perc_reflex,
-            "data_perc_status": data_perc_status,
+            "qualified": qualified,
+            "reflex": reflex,
+            
         }
 
     #----------------
@@ -271,7 +305,7 @@ def create_filemanager_agent(
         if state['n_iter'] > state['max_iter']:
             return "end"
         else:
-            if state['critique_status']:
+            if state['qualified']:
                 return "end"
             else:
                 return "regen"
@@ -286,21 +320,22 @@ def create_filemanager_agent(
     # add nodes
     builder.add_node("File management", node_file_management)
     builder.add_node("Env perception", env_perception)
-    builder.add_node("Data perc tasking",node_data_perception_tasking)
+    builder.add_node("Tasking",node_data_perception_tasking)
     builder.add_node("Coder",node_subgraph_coder)
-    builder.add_node("Data perc reflection",node_dataperc_reflection)
+    builder.add_node("Reflection",node_dataperc_reflection)
 
     # add edges
     builder.add_edge(START, "File management")
     builder.add_edge("File management","Env perception")
-    builder.add_edge("Env perception", "Data perc tasking")
-    builder.add_edge("Data perc tasking", "Coder")
+    builder.add_edge("Env perception", "Tasking")
+    builder.add_edge("Tasking", "Coder")
+    builder.add_edge("Coder","Reflection")
     builder.add_conditional_edges(
-        "Data perc reflection", 
+        "Reflection", 
         router_reflection,
         {
             "end"   : END, 
-            "regen" : "Data perc tasking"}
+            "regen" : "Tasking"}
         )
     
     return builder.compile(

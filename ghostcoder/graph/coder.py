@@ -324,7 +324,7 @@ def create_coder_agent(
         query_context += "\n\nMy code as follow:\n" + generated_codeblock
 
         subgraph_input = {
-            "query context": query_context
+            "query_context": query_context
         }
 
         # Get error fix web search solution by subgraph

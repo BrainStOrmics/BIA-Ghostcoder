@@ -34,7 +34,7 @@ Your task is to write a code writing instruction task following the documentatio
 6. Extract headers or metadata: If present, extract metadata (e.g., dataset description, experiment details) or headers that provide context for biological analysis.
 
 7. Return in a plain text format, include:
- - Print out file name and format for each data file as subtitle, e.g. in markdown use `###`.
+ - Print out file name with format for each data file.
  - Selected programming language and justification.
  - Data structure (e.g., matrix dimensions, row/column counts).
  - Biologically relevant fields (e.g., column names, keys in obs/var).
