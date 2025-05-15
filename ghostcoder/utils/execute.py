@@ -9,7 +9,9 @@ from anndata._core.anndata import AnnData
 from pandas.core.frame import DataFrame
 from contextlib import redirect_stdout, redirect_stderr
 
-def extract_code_blocks(markdown_text: str) -> list[str]:
+def extract_code_blocks(
+        markdown_text: str,
+        ) -> list[str]:
     """
     Extract the content of all code blocks from a Markdown text.
 

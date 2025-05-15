@@ -125,21 +125,7 @@ def create_filemanager_agent(
         env_profiles = state['env_profiles']
         
         # Get docker status perception 
-        docker_status_str = "Loaded dockers are:\n"
-        docker_profiles = load_docker_profiles()
-        docker_images = docker.from_env().images.list()
-        all_loaded_tags = []
-        for img in docker_images:
-            all_loaded_tags.append(img.tags[0]) 
-        for profile in docker_profiles['Docker images']:
-            profile_tags = profile['name']+':'+profile['tag']
-            profile_str = "docker name: " + profile_tags + "\n"
-            profile_str += "docker description: " + profile['description'] + "\n"
-            profile_str += "supported language: " + profile['languages'] + "\n"
-            profile_str += "pre-installed packages: " + profile['packages'] + "\n"
-            if profile_tags in all_loaded_tags:
-                docker_status_str += profile_str
-        # Pass to env_profiles 
+        docker_status_str = get_docker_status()
         env_profiles['docker status'] = docker_status_str
 
         # Get native env profiles 
@@ -235,7 +221,7 @@ def create_filemanager_agent(
             
         
         # Parse data perception
-        data_perc = coder_fin_state['execution_results']
+        data_perc = coder_fin_state['execution_outstr']
         data_perc_code = coder_fin_state['generated_codeblock']
         return {
             "data_perc": data_perc,

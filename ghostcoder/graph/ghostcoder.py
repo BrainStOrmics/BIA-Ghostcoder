@@ -201,7 +201,7 @@ def create_ghostcoder_agent(
             "task_id": task_id,
             "docker_profile_dir":docker_profile_dir,
             "max_iter": 10,
-            }
+        }
         
         # Get reference using file manager subgraph
         filemanager_state = filemanager_subgraph.invoke(
