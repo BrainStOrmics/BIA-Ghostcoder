@@ -149,7 +149,6 @@ def create_filemanager_agent(
             data_perc_reflex = state['data_perc_reflex'][:-1]
         except:
             data_perc_reflex = ""
-        env_profiles = state['env_profiles']
         data_files = state['data_files']
         try:
             n_iter = state['n_iter']
@@ -193,6 +192,7 @@ def create_filemanager_agent(
                 i+=1
                 if i == max_retry:
                     print(f"Error generating data perception task due to: \n{e}")
+                    raise  
 
         n_iter += 1
 
@@ -214,7 +214,7 @@ def create_filemanager_agent(
 
 ### Example format for output print:
 
-Data dir: data/adata_raw.h5ad
+Data name: adata_raw.h5ad
 Data perception:
     Format: annodata
     Details:
@@ -224,7 +224,7 @@ Data perception:
     Provided description:
         This is single cell RNAseq data collected from NCLC patients and health construct, from lung and other cancer metastatic sites.
 
-Data dir: data/metadata_table.csv
+File name: metadata_table.csv
 Data preception:
     Format: csv
     Details:
@@ -248,7 +248,8 @@ Data preception:
             
         
         # Parse data perception
-        data_perc = coder_fin_state['execution_outstr']
+        data_perc = "Path of input files: \n    " + os.path.join(file_config.WORK_DIR,ghostcoder_config.TASK_ID,file_config.DATA_DIR)
+        data_perc += coder_fin_state['execution_outstr']
         data_perc_code = coder_fin_state['generated_codeblock'][-1]
         return {
             "data_perc": data_perc,
@@ -289,7 +290,8 @@ Data preception:
             except Exception as e:
                 i+=1
                 if i == max_retry:
-                    print(f"Error critque data perception due to: \n{e}")
+                    print(f"Error critique data perception due to: \n{e}")
+                    raise  
 
         return {
             "qualified": qualified,

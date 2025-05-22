@@ -1,5 +1,7 @@
 import os
 
+current_file_path  = os.path.abspath(__file__)
+
 # For Tavily
 class tavily_config:
     API_KEY = ""
@@ -9,11 +11,8 @@ class tavily_config:
 class crawler_config:
     PRINT_WEBSEARCH_RES = False
     PRINT_WEBPAGE = False
+    N_QUERIES = 3
     N_TOP_RES = 5
-
-MAX_SPILT_ITER = 8
-
-current_file_path  = os.path.abspath(__file__)
 
 # For docker
 class docker_config:
@@ -21,6 +20,10 @@ class docker_config:
     DEFAULT_DOCKER_PROFILE = 'BIA_dockers.json'
     NEW_DOCKER_PROFILE = 'docker_images.json'
 
+# For coder
+class coder_config:
+    MAX_CRITIQUE = 3
+    MAX_ERROR = 7
 
 # For file management 
 class file_config:
@@ -31,20 +34,27 @@ class file_config:
     DATA_DIR = 'data'
     FIGURE_DIR = 'figures'
     OUTPUT_DIR = 'results'
-
+    # Retry inter
+    MAX_ITER = 3
 
 # For main graph
-DB_RETRIEVE = True  
+class ghostcoder_config:
+    DB_RETRIEVE = True  
+    MAX_ITER = 5
+    TASK_ID = "Test"
 
-
+# For task spilt
+class splitter_config:
+    MAX_SPILT_ITER = 3
 
 # For retiever subgraph
-DATABASES = [
-    {
-        "name":'web_crawler',
-        "description": 'Web search performed by Tavily and then crawl web content. Code blocks can be retrieve by search query.',
-    },
-    {
-        "name":'BIAdb_python',
-        "description": 'A reference code vector database for Python code used in bioinformatics analysis. Each code block is embedded according to its corresponding bioinformatics analysis task. Code blocks can be retrieve by task descriptions.',
-    }]
+class retriever_config:
+    DATABASES = [
+        {
+            "name":'web_crawler',
+            "description": 'Web search performed by Tavily and then crawl web content. Code blocks can be retrieve by search query.',
+        },
+        {
+            "name":'BIAdb_python',
+            "description": 'A reference code vector database for Python code used in bioinformatics analysis. Each code block is embedded according to its corresponding bioinformatics analysis task. Code blocks can be retrieve by task descriptions.',
+        }]

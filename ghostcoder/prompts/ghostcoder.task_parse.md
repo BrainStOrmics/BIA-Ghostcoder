@@ -28,6 +28,6 @@ If the task is 'Perform RNA-seq data analysis to identify differentially express
 ```json
 {
     "instruction": "The next step is to perform alignment of reads to the reference genome using tools like STAR or HISAT2. After alignment, conduct differential expression analysis using DESeq2 or edgeR. For visualization, create a volcano plot using matplotlib to highlight differentially expressed genes and a heatmap using seaborn to show expression patterns across samples.",
-    "criterias": "1. The code includes an alignment step using STAR or HISAT2;\n2. The code includes a differential expression analysis step using DESeq2 or edgeR;\n3. The code includes visualization steps for creating a volcano plot and a heatmap;\n4. The code runs without any syntax or runtime errors;\n5. BAM files from alignment are generated;7.6. Differentially expressed genes list is saved;\n7. Volcano plot is saved in the figures folder;8. Heatmap is saved in the figures folder."
+    "criteria": "1. The code includes an alignment step using STAR or HISAT2;\n2. The code includes a differential expression analysis step using DESeq2 or edgeR;\n3. The code includes visualization steps for creating a volcano plot and a heatmap;\n4. The code runs without any syntax or runtime errors;\n5. BAM files from alignment are generated;7.6. Differentially expressed genes list is saved;\n7. Volcano plot is saved in the figures folder;8. Heatmap is saved in the figures folder."
 }
 ```

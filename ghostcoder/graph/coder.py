@@ -116,7 +116,7 @@ def create_coder_agent(
         
         try:
             error_status = state['error_status']
-            error_summary = state['error_summary']
+            execution_outstr = state['execution_outstr']
         except:
             error_status = False
 
@@ -140,9 +140,9 @@ def create_coder_agent(
         
         # For error fix
         if error_status:
-            human_input += "## Error fix  \nYour previously code had the following error:\n" + error_summary + "\n"
+            human_input += "## Error fix  \nYour previously code had the following error:\n" + execution_outstr + "\n"
             human_input += "## Your code  \nThe code you generated for the above task is as follows, fix those error:\n" + generated_codeblock + "\n"
-            if len(web_summary) > 0:
+            if len(error_solution) > 0:
                 human_input += "## Fix solution  \nFollowing are web searched solutions to help with fix above errors:\n" + error_solution
 
         # For iterated code generation with critique
@@ -157,7 +157,11 @@ def create_coder_agent(
 
             # When RAG is available 
             if len(ref_codeblocks) > 0:
-                few_shots = "## Reference code blocks\nSome code blocks you can refer to that accomplish similar tasks, but the specific details may differ from this task:\n" + ref_codeblocks
+                few_shots = "## Reference code blocks\nSome code blocks you can refer to that accomplish similar tasks, but the specific details may differ from this task:\n" 
+                i = 1
+                for cb in ref_codeblocks:
+                    few_shots += "### Reference code #" + str(i) + "\n" 
+                    few_shots += cb + "\n\n" 
                 human_input += few_shots
 
 
@@ -168,8 +172,8 @@ def create_coder_agent(
         message = [
             SystemMessage(content=prompt.format(
                 task_instruction = task_instruction,
-                output_dir = file_config.OUTPUT_DIR+'/',
-                figure_dir = file_config.FIGURE_DIR+'/',
+                output_dir = os.path.join(file_config.WORK_DIR, ghostcoder_config.TASK_ID, file_config.OUTPUT_DIR),
+                figure_dir = os.path.join(file_config.WORK_DIR,ghostcoder_config.TASK_ID, file_config.FIGURE_DIR)
                 )),
             HumanMessage(content=human_input)
         ]
@@ -186,6 +190,7 @@ def create_coder_agent(
                 i+=1
                 if i == max_retry:
                     print(f"Error generating code: {e}")
+                    raise  
 
         # Handle failure after maximum retries
         if code_block is None:
@@ -236,6 +241,7 @@ def create_coder_agent(
                 i+=1
                 if i == max_retry:
                     print(f"Error generating critique due to: \n{e}")
+                    raise  
 
         return {
             'critique_status':critique_status, 
@@ -309,6 +315,7 @@ def create_coder_agent(
                 i+=1
                 if i == max_retry:
                     print(f"Error generating code: {e}")
+                    raise  
 
         return{
             'error_status':error_status,
@@ -392,6 +399,7 @@ def create_coder_agent(
                 i+=1
                 if i == max_retry:
                     print(f"Error generating code: {e}")
+                    raise  
         
         # Update iteration 
         n_error += 1
@@ -408,10 +416,13 @@ def create_coder_agent(
     #----------------
 
     def router_is_codeblock_qualified(state:State):
-        if state['critique_status']:
+        if state['n_iter'] < coder_config.MAX_CRITIQUE:
+            if state['critique_status']:
+                return "continue"
+            else:
+                return "regen"
+        else: 
             return "continue"
-        else:
-            return "regen"
         
     def router_is_error_occur(state:State):
         if state['error_status']:

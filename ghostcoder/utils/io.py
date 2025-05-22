@@ -98,3 +98,79 @@ def get_native_env_perception():
         if version != "Not installed":
             versions[lang["name"]] = version
     return versions
+
+
+# 编程语言到文件扩展名的映射
+language_to_ext = {
+    "python": ".py",
+    "r": ".R",
+    "java": ".java",
+    "c": ".c",
+    "cpp": ".cpp",
+    "javascript": ".js",
+    "html": ".html",
+    "css": ".css",
+    "bash": ".sh",
+    "sql": ".sql",
+    "markdown": ".md",
+}
+
+
+def save_code(lang, code_lines):
+    """
+    将给定的代码块保存为具有适当扩展名的文件。
+    
+    :param lang: 编程语言（如果未指定，则为 None）
+    :param code_lines: 包含代码的行列表
+    """
+    global counter
+    # 将行连接成完整的代码
+    code = "\n".join(code_lines)
+    # 根据语言确定文件扩展名
+    if lang and lang in language_to_ext:
+        ext = language_to_ext[lang]
+    else:
+        ext = ".txt"
+    # 生成唯一文件名
+    filename = os.path.join(file_config.WORK_DIR , ghostcoder_config.TASK_ID) + '/generated_code'+ ext
+    # 将代码写入文件
+    with open(filename, "w") as f:
+        f.write(code)
+
+def save_code_blocks(llm_output):
+    """
+    处理 LLM 输出，提取并保存所有代码块。
+    
+    :param llm_output: 包含 LLM 生成内容的字符串
+    """
+    lines = llm_output.split("\n")
+    in_code_block = False
+    current_lang = None
+    current_code = []
+    
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```") and not in_code_block:
+            # 代码块开始
+            in_code_block = True
+            # 提取语言（如果指定）
+            after_backticks = stripped[3:].strip()
+            if after_backticks:
+                lang_part = after_backticks.split(None, 1)[0]
+                current_lang = lang_part.lower()
+            else:
+                current_lang = None
+            current_code = []
+        elif stripped == "```" and in_code_block:
+            # 代码块结束
+            in_code_block = False
+            # 保存当前代码块
+            save_code(current_lang, current_code)
+            current_code = []
+        elif in_code_block:
+            # 收集代码块内的行
+            current_code.append(line)
+    # 处理未关闭的代码块
+    if in_code_block:
+        print("警告：发现未关闭的代码块。")
+        save_code(current_lang, current_code)

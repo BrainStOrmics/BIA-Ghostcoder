@@ -69,7 +69,10 @@ def create_crawler_agent(
 
         # Construct input message
         message = [
-            SystemMessage(content=prompt.format()),
+            SystemMessage(content=prompt.format(
+                n_queries = int(crawler_config.N_QUERIES)
+                )
+                ),
             HumanMessage(content=human_input)
         ]
 
@@ -85,6 +88,7 @@ def create_crawler_agent(
                 i+=1
                 if i == max_retry:
                     print(f"Error generating code: {e}")
+                    raise
 
         return {
             'query_list':query_list
@@ -113,9 +117,11 @@ def create_crawler_agent(
         for query in query_list:
             try:
                 res = websearch.invoke({"query":query})
-                query_results += res['results']
+                if 'results' in res.keys():
+                    query_results += res['results']
             except:
                 print("Query with question '"+str(query)+"'... Failed.")
+                raise
         
         if crawler_config.PRINT_WEBSEARCH_RES:
             print(query_results)
@@ -169,6 +175,7 @@ def create_crawler_agent(
                 i+=1
                 if i == max_retry:
                     print(f"Error filter web search pages due to: {e}")
+                    raise
         
         # Parse filter index
         parsed_idx = []
@@ -210,6 +217,7 @@ def create_crawler_agent(
                     i+=1
                     if i == max_retry:
                         print(f"Error crawling web pages due to: {e}")
+                        raise
 
         return {
             'useful_results':useful_results,
@@ -247,6 +255,7 @@ def create_crawler_agent(
                 i+=1
                 if i == max_retry:
                     print(f"Error generating code: {e}")
+                    raise
 
         return {
             'summary':response.content

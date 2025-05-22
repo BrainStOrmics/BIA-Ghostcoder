@@ -22,7 +22,7 @@ Adhere strictly to these rules:
 Please respond in the following **json** format:
 ```json
 {
-   "qualified": bool, // `True` for provided code is qualified, `False` for code need major correction.
+   "qualified": bool, // `true` for provided code is qualified, `false` for code need major correction.
    "self-critique report":{ // A structured self-critique report
       "format compliance check":str, // Improvement suggestions for code format compliance, this includes but is not limited to: Correct libraries imported? Proper exception handling? Adequate documentation and comments? If the code passes reply `all checked`
       "task compliance evaluation": str, // Improvement suggestions for code format compliance, this includes but is not limited to: Does the code fully address the user's task? Does the workflow of the code make logical sense? Has the necessary plotting been carried out? If the code passes reply `all checked`

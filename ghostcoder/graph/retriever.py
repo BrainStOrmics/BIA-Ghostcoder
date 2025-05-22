@@ -41,7 +41,8 @@ def create_retriever_agent(
         task_description: str
 
         #generated
-        db_use: str 
+        db_use: str
+        crawl_res: dict 
         ref_codeblocks: list
 
 
@@ -74,9 +75,9 @@ def create_retriever_agent(
         task_description = state['task_description']
         
         # Load DB profiles, and convert to string
-        db_profiles = DATABASES
+        db_profiles = retriever_config.DATABASES
         db_desc_str = "## Avaliable databases are:  \n---\n"
-        for db in DATABASES:
+        for db in db_profiles:
             db_desc_str += "DB Name: " + db['name'] +"\n"
             db_desc_str += "DB description: " + db['description'] +"\n---\n"
 
@@ -125,11 +126,12 @@ def create_retriever_agent(
             try:
                 res = crawler_subgraph.invoke({"query_context":input_str})
                 crawl_res = res["useful_results"]
+                break 
             except Exception as e:
                 i+=1
                 if i == max_retry:
                     print(f"Error invoke web crawler: {e}")
-
+                    raise
         
         # Call prompt template
         prompt, input_vars = load_prompt_template('retriever.parse_webpage')
@@ -137,28 +139,33 @@ def create_retriever_agent(
         # Parse webpage content
         webpages = []
         for res in crawl_res:
-            # Parse human input
-            human_input = "## The original web page content:  \n" + res['fullpage_content'] + "\n"
+            if 'fullpage_content' in res.keys():
+                if len(res['fullpage_content']) < 100: #skip page with too few content
+                    continue
+                # Parse human input
+                human_input = "## The original web page content:  \n" + res['fullpage_content'] + "\n"
 
-            # Construct input message
-            message = [
-                SystemMessage(content=prompt.format()),
-                HumanMessage(content=human_input)
-            ]
+                # Construct input message
+                message = [
+                    SystemMessage(content=prompt.format()),
+                    HumanMessage(content=human_input)
+                ]
+                i = 0
+                while i < max_retry: 
+                    try:
+                        response = chat_model.invoke(message)
+                        parsed_page = response.content
+                        break
+                    except Exception as e:
+                        i+=1
+                        if i == max_retry:
+                            print(f"Error parse web page due to: {e}")
+                            raise
 
-            while i < max_retry: 
-                try:
-                    response = chat_model.invoke(message)
-                    parsed_page = response.content
-                    break
-                except Exception as e:
-                    i+=1
-                    if i == max_retry:
-                        print(f"Error parse web page due to: {e}")
-
-            webpages.append(parsed_page)
+                webpages.append(parsed_page)
 
         return {
+            "crawl_res": crawl_res,
             "ref_codeblocks": webpages
         }
     
@@ -219,6 +226,7 @@ def create_retriever_agent(
                 i+=1
                 if i == max_retry:
                     print(f"Error filter retrieve due to: {e}")
+                    raise
 
         fin_codeblocks = []
         for idx in indexes:

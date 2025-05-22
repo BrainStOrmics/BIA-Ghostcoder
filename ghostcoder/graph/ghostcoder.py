@@ -45,20 +45,25 @@ def create_ghostcoder_agent(
         task_id: str
         task_description: str
         previous_codeblock: str
-
-        #parameter
-        use_reg: bool
+        max_iter: int 
         
         #generated
-        n_iter = 0 
+        n_iter: int
         task_instruction: str
         criteria: str
+        env_profiles: dict
+        
         data_perception: str
         ref_codeblocks: str
         generated_codeblock: str
         execution_outstr: str
         eval_decision: bool
         improvements: str
+        task_result: str
+
+        #debug
+        filemanager_state: dict
+        coder_state:dict
 
 
     #----------------
@@ -83,7 +88,7 @@ def create_ghostcoder_agent(
         chat_model = chat_model, 
         code_model = code_model,
         max_retry = max_retry,
-        name =  "reg_subgretriever_subgraphraph",
+        name =  "retriever_subgraph",
         config_schema = config_schema,
         checkpointer = checkpointer,
         store = store,
@@ -111,13 +116,58 @@ def create_ghostcoder_agent(
     # Define nodes
     #----------------
 
+    async def node_filemanager(state:State):
+        """"""
+
+        # Pass inputs
+        try: 
+            max_iter = state['max_iter']
+        except:
+            max_iter = ghostcoder_config.MAX_ITER
+        try:
+            task_id = state['task_id']
+        except:
+            task_id = ghostcoder_config.TASK_ID
+
+
+        docker_profile_dir = docker_config.DOCKER_PROFILES_DIR
+
+        # Parse inputs
+        fm_input = {
+            "task_id": task_id,
+            "docker_profile_dir":docker_profile_dir,
+            "max_iter": file_config.MAX_ITER,
+        }
+        
+        # Get reference using file manager subgraph
+        i = 0
+        while i < max_retry:
+            try:
+                filemanager_state = await filemanager_subgraph.ainvoke(
+                    fm_input,
+                    config = config_schema)
+                # Pass output
+                data_perception = filemanager_state['data_perc']
+                env_profiles = filemanager_state['env_profiles']
+                break
+            except Exception as e:
+                i+=1
+                if i == max_retry:
+                    print(f"Error deal with file system due to: {e}")
+                    raise  
+
+        return {
+            "data_perception": data_perception,
+            "env_profiles": env_profiles,
+            "filemanager_state": filemanager_state
+        }
+
     def node_task_parser(state:State):
         """"""
 
         # Pass inputs
         task_description = state['task_description']
         previous_codeblock = state['previous_codeblock']
-        n_iter = state['n_iter']
         try:
             improvements = state['improvements']
             task_instruction = state['task_instruction']
@@ -152,21 +202,18 @@ def create_ghostcoder_agent(
         while i < max_retry:
             try:
                 json_output = chain.invoke(message)
-                task_instruction =  json_output['task_instruction']
-                criteria = json_output['criterias']
+                task_instruction =  json_output['instruction']
+                criteria = json_output['criteria']
                 break
             except Exception as e:
                 i+=1
                 if i == max_retry:
                     print(f"Error generating task instruction: {e}")
+                    raise  
         
-    
-        n_iter += 1
-
         return {
             "task_instruction": task_instruction,
             "criteria": criteria,
-            "n_iter": n_iter
             }
 
 
@@ -179,60 +226,43 @@ def create_ghostcoder_agent(
             }
 
         # Get reference using Retriever subgraph
-        retriever_state = retriever_subgraph.invoke(
-            retriever_input,
-            config = config_schema)
+        i = 0
+        while i < max_retry:
+            try:
+                retriever_state = retriever_subgraph.invoke(
+                    retriever_input,
+                    config = config_schema)
+                # Pass output
+                ref_codeblocks = retriever_state['ref_codeblocks']
+                break
+            except Exception as e:
+                i+=1
+                if i == max_retry:
+                    print(f"Error get reference code due to: {e}")
+                    raise  
+
+                
         
-        # Pass output
-        ref_codeblocks = retriever_state['ref_codeblocks']
 
         return {
             "ref_codeblocks":ref_codeblocks,
             }
     
-    def node_filemanager(state:State):
-        """"""
 
-        # Pass inputs
-        task_id = state['task_id']
-        docker_profile_dir = DOCKER_PROFILES_DIR
-
-        fm_input = {
-            "task_id": task_id,
-            "docker_profile_dir":docker_profile_dir,
-            "max_iter": 10,
-        }
-        
-        # Get reference using file manager subgraph
-        filemanager_state = filemanager_subgraph.invoke(
-            fm_input,
-            config = config_schema)
-        
-        # Pass output
-        data_perception = filemanager_state['data_perc']
-        env_profiles = filemanager_state['env_profiles']
-
-        return {
-            "data_perception": data_perception,
-            "env_profiles": env_profiles
-        }
-
-    
-    def node_coder(state:State):
+    async def node_coder(state:State):
         """"""
 
         # Pass inputs
         coder_input = {
             "task_instruction"  : state['task_instruction'],
+            "data_perception"   : state['data_perception'],
             "ref_codeblocks"    : state['ref_codeblocks'],
             "previous_codeblock": state['previous_codeblock'],
-            "data_perception"   : state['data_perception'],
-            "n_iter" : 0,
-            "n_error": 0,
+            "env_profiles"      : state["env_profiles"],
             }
 
         # Generate bioinformatics code with coder subgraph
-        coder_state = coder_subgraph.invoke(
+        coder_state = await coder_subgraph.ainvoke(
             coder_input,
             config = config_schema
             )
@@ -243,7 +273,8 @@ def create_ghostcoder_agent(
         
         return {
             "generated_codeblock":generated_codeblock,
-            "execution_outstr": execution_outstr
+            "execution_outstr": execution_outstr,
+            "coder_state":coder_state
             }
 
     def node_evaluator(state:State):
@@ -255,7 +286,11 @@ def create_ghostcoder_agent(
         generated_codeblock = state['generated_codeblock']
         execution_outstr = state['execution_outstr']
         criteria = state['criteria']
-        
+        try:
+            n_iter = state['n_iter']
+        except:
+            n_iter = 0
+
         human_input =  "## Analysis task:  \n" + task_description + '\n'
         human_input += "## Instruction in last round:  \n" + task_instruction + '\n'
         human_input += "## Evaluation criteria:  \n" + criteria + '\n'
@@ -284,10 +319,57 @@ def create_ghostcoder_agent(
                 i+=1
                 if i == max_retry:
                     print(f"Error generating task instruction: {e}")
+                    raise  
+
+        # update iteration 
+        n_iter += 1
         
         return {
-            "eval_decision": decision, 
+            "eval_decision": eval_decision, 
             "improvements": improvements,
+            "n_iter": n_iter,
+        }
+    
+
+    def node_output_parser(state:State):
+        """"""
+
+        # Pass inputs
+        task_instruction = state['task_instruction']
+        generated_codeblock = state['generated_codeblock'][-1]
+        execution_outstr = state['execution_outstr']
+
+        # Parse human input
+        human_input =  "## Instruction of analysis task:  \n" + task_instruction + '\n'
+        human_input += "## Execution by following code:  \n" + generated_codeblock + '\n'
+        human_input += "## Execution results:  \n" + execution_outstr + '\n'
+
+        # Call prompt template
+        prompt, input_vars = load_prompt_template('ghostcoder.output')
+
+        # Construct input message
+        message = [
+            SystemMessage(content=prompt.format()),
+            HumanMessage(content=human_input)
+        ]
+
+        # Generate task instruction with llm
+        i = 0
+        while i < max_retry:
+            try:
+                respons = chat_model.invoke(message)
+                break
+            except Exception as e:
+                i+=1
+                if i == max_retry:
+                    print(f"Error generating output: {e}")
+                    raise  
+        
+        # Encapsulated execution code
+        save_code_blocks(generated_codeblock)
+
+        return {
+            "task_result":  respons.content,
         }
     
 
@@ -296,18 +378,21 @@ def create_ghostcoder_agent(
     #----------------
     
     def router_use_RAG(state:State):
-        if state['use_reg']:
+        if ghostcoder_config.DB_RETRIEVE:
             return "RAG"
         else:
             return "continue"
         
     def router_eval(state:State):
-        if state['eval_decision'].lower() == 'refine instruction':
-            return "regen_instruc"
-        elif state['eval_decision'].lower() == 'regenerate code':
-            return "coder"
+        if state['n_iter'] < ghostcoder_config.MAX_ITER:
+            if state['eval_decision'].lower() == 'refine instruction':
+                return "regen_instruc"
+            elif state['eval_decision'].lower() == 'regenerate code':
+                return "coder"
+            else:
+                return "output"
         else:
-            return "end"
+            return "output"
         
     #----------------
     # Compile graph
@@ -316,14 +401,16 @@ def create_ghostcoder_agent(
     # initial builder
     builder = StateGraph(State, config_schema = config_schema)
     # add nodes
+    builder.add_node("File manager", node_filemanager)
     builder.add_node("Task parser", node_task_parser)
     builder.add_node("Retriever", node_retriever)
-    builder.add_node("File manager", node_filemanager)
     builder.add_node("Coder",node_coder)
     builder.add_node("Evaluator",node_evaluator)
+    builder.add_node("Output parser",node_output_parser)
     # builder.add_node("Update env",node_update_env)
     # add edges
-    builder.add_edge(START, "Task parser")
+    builder.add_edge(START, "File manager")
+    builder.add_edge("File manager", "Task parser")
     builder.add_conditional_edges(
         "Task parser", 
         router_use_RAG,
@@ -335,14 +422,15 @@ def create_ghostcoder_agent(
     builder.add_edge("Retriever","Coder")
     builder.add_edge("Coder", "Evaluator")
     builder.add_conditional_edges(
-        "Task parser", 
-        router_use_RAG,
+        "Evaluator", 
+        router_eval,
         {
             "regen_instruc" : "Task parser", 
             "coder"         : "Coder",
-            "end"           : END
+            "output"        : "Output parser",
         }
     )
+    builder.add_edge("Output parser", END)
 
 
     return builder.compile(

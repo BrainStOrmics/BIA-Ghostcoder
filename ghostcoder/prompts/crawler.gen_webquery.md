@@ -1,4 +1,4 @@
-Please generate 3 accurate Tavily queries based on the following conversation context and current question. Tavily is an AI search engine that helps users retrieve information. Please generate queries follow these steps, then return in required format:
+Please generate <<n_queries>> accurate Tavily queries based on the following conversation context and current question. Tavily is an AI search engine that helps users retrieve information. Please generate queries follow these steps, then return in required format:
 
 
 ## Generation steps
