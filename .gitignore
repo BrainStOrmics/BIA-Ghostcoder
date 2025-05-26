@@ -3,3 +3,4 @@ local_tests/
 *.h5ad
 Example/Test/
 Example/DEMO/
+.venv/

@@ -1,0 +1,28 @@
+[project]
+name = "bia-ghostcoder"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "autogen-ext[docker]>=0.5.7",
+    "docker>=7.1.0",
+    "langchain-deepseek>=0.1.3",
+    "langchain-postgres>=0.0.14",
+    "langchain-tavily>=0.1.6",
+    "langchain-unstructured>=0.1.6",
+    "langchain[openai]>=0.3.25",
+    "langgraph>=0.4.7",
+    "pandas>=2.2.3",
+    "scanpy>=1.11.1",
+]
+
+[tool.uv.workspace]
+members = [
+    "ghostcoder",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+]

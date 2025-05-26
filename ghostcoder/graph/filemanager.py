@@ -1,7 +1,7 @@
 from ..utils import *
 from ..prompts import load_prompt_template
 from ..config import *
-from .coder import create_coder_agent
+from .coder import create_coder_agent, ghostcoder_config
 from ..docker import *
 
 import docker
@@ -163,7 +163,8 @@ def create_filemanager_agent(
             reflex_str = ""
 
         # Parse human input
-        human_input = "## Data files:  \n" + str(data_files) + "\n" + reflex_str
+        data_dir = os.path.join(file_config.WORK_DIR, ghostcoder_config.TASK_ID, file_config.DATA_DIR)
+        human_input = "## Data files under direction "+ data_dir  +":  \n" + str(data_files) + "\n" + reflex_str
 
         # # Parse data file description
         # data_desc_file_path =  os.path.join(env_profiles['task_dirs']['data_dir'],'data_description.txt')
