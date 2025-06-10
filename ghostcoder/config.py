@@ -2,6 +2,29 @@ import os
 
 current_file_path  = os.path.abspath(__file__)
 
+# For LLMs apis
+class llm_api_config:
+    CHAT_MODEL_API = {
+        "api" : "",
+        "url" : "",
+        "model": "",
+    }
+    CODE_MODEL_API = {
+        "api" : "",
+        "url" : "",
+        "model": "",
+    }
+    EMBED_MODEL_API = {
+        "api" : "",
+        "url" : "",
+        "model": "",
+    }
+    MODELS = {
+        "chat_model" : None,
+        "code_model" : None,
+        "embed_model" : None,
+    }
+
 # For Tavily
 class tavily_config:
     API_KEY = ""
@@ -42,6 +65,7 @@ class ghostcoder_config:
     DB_RETRIEVE = True  
     MAX_ITER = 5
     TASK_ID = "Test"
+    SESSION_ID = "temp"
 
 # For task spilt
 class splitter_config:
@@ -55,6 +79,7 @@ class retriever_config:
             "description": 'Web search performed by Tavily and then crawl web content. Code blocks can be retrieve by search query.',
         },
         {
-            "name":'BIAdb_python',
-            "description": 'A reference code vector database for Python code used in bioinformatics analysis. Each code block is embedded according to its corresponding bioinformatics analysis task. Code blocks can be retrieve by task descriptions.',
+            "name":'RefCodeDB',
+            "description": 'A reference code vector database for tools used in bioinformatics analysis. Each code block is embedded according to its corresponding bioinformatics analysis task. Code blocks can be retrieve by task descriptions.',
         }]
+    

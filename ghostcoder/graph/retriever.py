@@ -64,6 +64,19 @@ def create_retriever_agent(
         )
 
     #----------------
+    # initial retrievers
+    #----------------
+    retrievers = []
+    for db in retriever_config.DATABASES:
+        if db['name'] != 'web_crawler':
+            try:
+                retriever =  setup_vdbs(db['name'])
+                retrievers.append(retriever)
+            except Exception as e:
+                print(e)
+
+
+    #----------------
     # Define nodes
     #----------------
     def node_chose_db(state:State):
@@ -171,16 +184,21 @@ def create_retriever_agent(
     
     def node_vdb_retriever(state:State):
         """
-        TODO: build real vector database retriever 
         """
 
         # Pass inputs
         task_description = state['task_description']
         
-        crawl_res = []
+        # Retrieve refcode 
+        refcodes=[]
+        for retriever in retrievers:
+            docs = retriever.invoke(task_description)
+            for doc in docs:
+                code = doc.metadata["CodeBlock"]
+                refcodes.apppend(code)
 
         return {
-            "ref_codeblocks": crawl_res
+            "ref_codeblocks": refcodes
         }
 
 

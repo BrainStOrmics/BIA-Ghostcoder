@@ -167,6 +167,7 @@ def create_ghostcoder_agent(
 
         # Pass inputs
         task_description = state['task_description']
+        data_perception = state['data_perception']
         previous_codeblock = state['previous_codeblock']
         try:
             improvements = state['improvements']
@@ -178,7 +179,8 @@ def create_ghostcoder_agent(
 
 
         # Parse human input
-        human_input = "## Analysis task:  \n" + task_description + '\n\n'
+        human_input = "## Analysis task:  \n" + task_description + '\n'
+        human_input = "## Data input:  \n" + data_perception + '\n'
         if len(previous_codeblock) > 1:
             human_input += "## Codes for previous step:  \n---------\n" + previous_codeblock + '\n---------\n'
         if len(improvements) > 1:

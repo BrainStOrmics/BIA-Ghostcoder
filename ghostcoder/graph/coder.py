@@ -41,6 +41,7 @@ def create_coder_agent(
 
     class State(TypedDict):
         #input
+        session_id: str
         task_instruction: str 
         ref_codeblocks: str
         previous_codeblock: str
@@ -110,7 +111,7 @@ def create_coder_agent(
         ref_codeblocks = state['ref_codeblocks']
         env_profiles = state['env_profiles']
         try:
-            n_iter = state[n_iter]
+            n_iter = state["n_iter"]
         except:
             n_iter = 0
         
@@ -134,6 +135,10 @@ def create_coder_agent(
             error_solution = state['error_solution']
         except:
             error_solution = ""
+        try:
+            session_id = state['session_id']
+        except:
+            session_id = ghostcoder_config.SESSION_ID
 
         # Parse human input
         human_input = "## Data  \nThe current code block serves the following data files:\n" + data_perception + '\n'
@@ -172,8 +177,16 @@ def create_coder_agent(
         message = [
             SystemMessage(content=prompt.format(
                 task_instruction = task_instruction,
-                output_dir = os.path.join(file_config.WORK_DIR, ghostcoder_config.TASK_ID, file_config.OUTPUT_DIR),
-                figure_dir = os.path.join(file_config.WORK_DIR,ghostcoder_config.TASK_ID, file_config.FIGURE_DIR)
+                output_dir = os.path.join(
+                    file_config.WORK_DIR, 
+                    session_id,
+                    ghostcoder_config.TASK_ID, 
+                    file_config.OUTPUT_DIR),
+                figure_dir = os.path.join(
+                    file_config.WORK_DIR,
+                    session_id,
+                    ghostcoder_config.TASK_ID, 
+                    file_config.FIGURE_DIR)
                 )),
             HumanMessage(content=human_input)
         ]

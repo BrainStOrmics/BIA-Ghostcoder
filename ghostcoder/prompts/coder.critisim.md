@@ -24,8 +24,9 @@ Please respond in the following **json** format:
 {
    "qualified": bool, // `true` for provided code is qualified, `false` for code need major correction.
    "self-critique report":{ // A structured self-critique report
-      "format compliance check":str, // Improvement suggestions for code format compliance, this includes but is not limited to: Correct libraries imported? Proper exception handling? Adequate documentation and comments? If the code passes reply `all checked`
-      "task compliance evaluation": str, // Improvement suggestions for code format compliance, this includes but is not limited to: Does the code fully address the user's task? Does the workflow of the code make logical sense? Has the necessary plotting been carried out? If the code passes reply `all checked`
+      "format compliance":str, // Improvement suggestions for code format compliance, this includes but is not limited to: Correct libraries imported? Proper exception handling? Adequate documentation and comments? If the code passes reply `all checked`
+      "task compliance": str, // Improvement suggestions for code format compliance, this includes but is not limited to: Does the code fully address the user's task? Does the workflow of the code make logical sense? Has the necessary plotting been carried out? If the code passes reply `all checked`
+      "I/O compliance": str, // Improvement suggestions for data saving, including whether the filename is reasonable, whether there are any illusions in the file direction, and especially whether the functions used for data saving are correct.
       "security check": str, // Improvement suggestions code security. If the code passes reply `all checked`
    }
 }

@@ -4,7 +4,7 @@ from ..config import *
 from .coder import create_coder_agent, ghostcoder_config
 from ..docker import *
 
-import docker
+from venv import logger
 
 from typing import TypedDict, Annotated, Optional, Type, Any
 import operator 
@@ -43,6 +43,7 @@ def create_filemanager_agent(
 
     class State(TypedDict):
         #input
+        session_id: str
         task_id: str
         docker_files_dir: str
         
@@ -86,12 +87,20 @@ def create_filemanager_agent(
         """
 
         # Pass input 
+        session_id = state['session_id']
         task_id = state['task_id']
 
         # Check work dir
-        work_data_dir = os.path.join(file_config.WORK_DIR,file_config.INPUT_DATA_DIR)
+        work_data_dir = os.path.join(
+            file_config.WORK_DIR,
+            session_id,
+            file_config.INPUT_DATA_DIR)
 
-        task_dir = os.path.join(file_config.WORK_DIR,task_id)
+        task_dir = os.path.join(
+            file_config.WORK_DIR,
+            session_id,
+            task_id)
+        
         if not check_dir_exists(task_dir):
             create_dir(task_dir)
         task_data_dir = os.path.join(task_dir, file_config.DATA_DIR)
@@ -154,6 +163,10 @@ def create_filemanager_agent(
             n_iter = state['n_iter']
         except:
             n_iter = 0
+        try:
+            session_id = state['session_id']
+        except:
+            session_id = ghostcoder_config.SESSION_ID
 
         # Parse reflex
         if len(data_perc_reflex) > 0:
@@ -163,8 +176,13 @@ def create_filemanager_agent(
             reflex_str = ""
 
         # Parse human input
-        data_dir = os.path.join(file_config.WORK_DIR, ghostcoder_config.TASK_ID, file_config.DATA_DIR)
+        data_dir = os.path.join(
+            file_config.WORK_DIR, 
+            session_id,
+            ghostcoder_config.TASK_ID, 
+            file_config.DATA_DIR)
         human_input = "## Data files under direction "+ data_dir  +":  \n" + str(data_files) + "\n" + reflex_str
+        logger.info(f"human_input: {human_input}")
 
         # # Parse data file description
         # data_desc_file_path =  os.path.join(env_profiles['task_dirs']['data_dir'],'data_description.txt')
@@ -209,6 +227,7 @@ def create_filemanager_agent(
         # Pass inputs
         data_perc_task = state['data_perc_task'][-1]
         env_profiles = state['env_profiles']
+        session_id = state['session_id']
 
         # Output example
         output_example = """
@@ -245,11 +264,16 @@ Data preception:
                 "previous_codeblock" : "",
                 "ref_codeblocks" : [],
                 "env_profiles" : env_profiles,
+                "session_id" : session_id,
             })
             
         
         # Parse data perception
-        data_perc = "Path of input files: \n    " + os.path.join(file_config.WORK_DIR,ghostcoder_config.TASK_ID,file_config.DATA_DIR)
+        data_perc = "Path of input files: \n    " + os.path.join(
+            file_config.WORK_DIR,
+            session_id,
+            ghostcoder_config.TASK_ID,
+            file_config.DATA_DIR)
         data_perc += coder_fin_state['execution_outstr']
         data_perc_code = coder_fin_state['generated_codeblock'][-1]
         return {
