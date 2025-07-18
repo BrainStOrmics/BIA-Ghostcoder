@@ -1,0 +1,73 @@
+llm_config:
+  # Setup chat/reasoning model, for sematic reasoning 
+  CHAT_MODEL_API:
+    api: 
+    url: 
+    model:
+    type: openai # Only openai api-compatible llm is supported, for now
+  # Setup coding/chat model, for code generation
+  CODE_MODEL_API:
+    api: 
+    url: 
+    model:
+    type: openai # Only openai api-compatible llm is supported, for now
+  # Setup embedding model, for RAG
+  EMBED_MODEL_API:
+    api: 
+    url: 
+    model:
+    type: openai # Support openai api-compatible llms, and dashscope models, but dashscope models are openai api friendly...
+  # You don't need to setup vision model, for now
+  CODE_MODEL_API:
+    api: 
+    url: 
+    model:
+    type: openai # Only openai api-compatible llm is supported, for now
+
+tavily_config:
+  API_KEY:
+  MAX_RESULTS: 7
+
+crawler_config:
+  PRINT_WEBSEARCH_RES: false
+  PRINT_WEBPAGE: false
+  N_QUERIES: 3
+  N_TOP_RES: 5
+
+docker_config:
+  DOCKER_PROFILES_DIR: ./ghostcoder/docker/
+  DEFAULT_DOCKER_PROFILE: BIA_dockers.json
+  NEW_DOCKER_PROFILE: docker_images.json
+
+coder_config:
+  MAX_CRITIQUE: 3
+  MAX_ERROR: 7
+
+file_config:
+  #WORK_DIR: './work'
+  INPUT_DATA_DIR: data
+  # task file
+  DATA_DIR: data
+  FIGURE_DIR: figures
+  OUTPUT_DIR: results
+  # Retry inter
+  MAX_ITER: 3
+
+ghostcoder_config:
+    DB_RETRIEVE: true  
+    MAX_ITER: 5
+    TASK_ID: Test
+    SESSION_ID: temp
+
+
+splitter_config:
+    MAX_SPILT_ITER: 3
+
+# For retiever subgraph
+retriever_config:
+    DATABASES:
+      - name: web_crawler
+        description: Web search performed by Tavily and then crawl web content. Code blocks can be retrieve by search query.
+      - name: RefCodeDB
+        description: A reference code vector database for tools used in bioinformatics analysis. Each code block is embedded according to its corresponding bioinformatics analysis task. Code blocks can be retrieve by task descriptions.
+    

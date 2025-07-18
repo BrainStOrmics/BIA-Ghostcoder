@@ -4,3 +4,4 @@ local_tests/
 Example/Test/
 Example/DEMO/
 .venv/
+config.yaml

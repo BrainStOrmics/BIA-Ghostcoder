@@ -109,7 +109,6 @@ def create_coder_agent(
         data_perception = state['data_perception']
         previous_codeblock = state['previous_codeblock']
         ref_codeblocks = state['ref_codeblocks']
-        env_profiles = state['env_profiles']
         try:
             n_iter = state["n_iter"]
         except:
@@ -221,7 +220,7 @@ def create_coder_agent(
     def node_criticism(state:State):
         """
         This function evaluates the generated code using an LLM and provides a critique.
-        It determines if the code is qualified and generates a self-critique report.
+        It determines if the code is qualified and generates a self critique report.
         """
 
         # Pass inputs
@@ -247,7 +246,7 @@ def create_coder_agent(
             try:
                 json_output = chain.invoke(message)
                 critique_status = json_output['qualified']
-                critique = json_output['self-critique report']
+                critique = json_output['self_critique_report']
                 critique = critique_report_2md(critique)
                 break
             except Exception as e:

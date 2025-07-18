@@ -243,9 +243,6 @@ def create_ghostcoder_agent(
                     print(f"Error get reference code due to: {e}")
                     raise  
 
-                
-        
-
         return {
             "ref_codeblocks":ref_codeblocks,
             }
@@ -278,6 +275,7 @@ def create_ghostcoder_agent(
             "execution_outstr": execution_outstr,
             "coder_state":coder_state
             }
+
 
     def node_evaluator(state:State):
         """"""

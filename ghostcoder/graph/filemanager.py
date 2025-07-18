@@ -170,7 +170,7 @@ def create_filemanager_agent(
 
         # Parse reflex
         if len(data_perc_reflex) > 0:
-            reflex_str = "### Code for data perception, executed in the previous round:  \n" + data_perc_reflex
+            reflex_str = "### Code for data perception, executed in the previous round:  \n" + data_perc_code
             reflex_str += "### With following reflection note:  \n" + data_perc_reflex
         else:
             reflex_str = ""
@@ -212,26 +212,9 @@ def create_filemanager_agent(
                 if i == max_retry:
                     print(f"Error generating data perception task due to: \n{e}")
                     raise  
-
-        n_iter += 1
-
-        return {
-            'data_perc_task':[data_perc_task], 
-            'n_iter': n_iter,
-        }
-    
-
-    async def node_subgraph_coder(state:State):
-        """"""
-
-        # Pass inputs
-        data_perc_task = state['data_perc_task'][-1]
-        env_profiles = state['env_profiles']
-        session_id = state['session_id']
-
+        
         # Output example
         output_example = """
-
 ### Example format for output print:
 
 Data name: adata_raw.h5ad
@@ -253,8 +236,26 @@ Data preception:
     Provided description:
         Not provide
         """
-
         data_perc_task += output_example
+
+        n_iter += 1
+
+
+
+        return {
+            'data_perc_task':[data_perc_task], 
+            'n_iter': n_iter,
+        }
+    
+
+    async def node_subgraph_coder(state:State):
+        """"""
+
+        # Pass inputs
+        data_perc_task = state['data_perc_task'][-1]
+        env_profiles = state['env_profiles']
+        session_id = state['session_id']
+
 
         # Invoke coder subgraph to get data perception
         coder_fin_state = await coder_subgraph.ainvoke(

@@ -1,0 +1,2 @@
+Overall design:
+Isolated islets from wild type male mice. Islets from adult males were pooled, cultured overnight in RPMI containing 11 mM glucose. The next day, all islets were starved in RPMI containing 2.8 mM glucose for 2 hours before stimulation with 2.8 mM glucose or 16.8 mM glucose for 12 hours. Islets were lysed in Trizol for RNA isolation and library construction.

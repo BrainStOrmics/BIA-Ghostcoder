@@ -104,8 +104,7 @@ def create_crawler_agent(
         query_list = state['query_list']
         
         # Set up Tavily key
-        if not isinstance(os.environ.get("TAVILY_API_KEY"),str):
-            os.environ["TAVILY_API_KEY"] = tavily_config.API_KEY
+        os.environ["TAVILY_API_KEY"] = tavily_config.API_KEY
         
         # Call Tavily search 
         websearch = TavilySearch(
