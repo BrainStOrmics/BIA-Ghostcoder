@@ -10,7 +10,7 @@ from typing import Type, Optional, Any
 from langchain_core.language_models import LanguageModelLike
 from langchain_tavily  import TavilySearch
 #langgraph
-from langgraph.graph.graph import CompiledGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 #from langgraph.types import interrupt
 #plot graph
@@ -34,7 +34,7 @@ class GhostCoder:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         debug: bool = False,
-        ) -> CompiledGraph:
+        ) -> CompiledStateGraph:
         
         """
         

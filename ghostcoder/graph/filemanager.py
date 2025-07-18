@@ -14,7 +14,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
 #langgraph
 from langgraph.graph import StateGraph, START, END
-from langgraph.graph.graph import CompiledGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Checkpointer
 from langgraph.store.base import BaseStore
 from langgraph.checkpoint.memory import MemorySaver
@@ -35,7 +35,7 @@ def create_filemanager_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
-    ) -> CompiledGraph:
+    ) -> CompiledStateGraph:
 
     #----------------
     # Define graph state
