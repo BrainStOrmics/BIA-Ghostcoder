@@ -1,6 +1,7 @@
 import os 
 import shutil
 import subprocess
+import yaml
 from ghostcoder.config import *
 
 from langchain_postgres.vectorstores import PGVector

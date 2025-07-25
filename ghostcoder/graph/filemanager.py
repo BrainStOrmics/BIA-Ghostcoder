@@ -87,7 +87,11 @@ def create_filemanager_agent(
         """
 
         # Pass input 
-        session_id = state['session_id']
+        try:
+            session_id = state['session_id']
+        except:
+            session_id = ''
+
         task_id = state['task_id']
 
         # Check work dir
@@ -239,7 +243,6 @@ Data preception:
         data_perc_task += output_example
 
         n_iter += 1
-
 
 
         return {

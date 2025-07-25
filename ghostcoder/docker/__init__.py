@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import docker
 import json
 import docker.errors
@@ -9,8 +10,12 @@ from ..config import *
 
 
 def load_docker_profiles():
-    default_profile_path = os.path.join(docker_config.DOCKER_PROFILES_DIR,docker_config.DEFAULT_DOCKER_PROFILE)
-    new_profile_path = os.path.join(docker_config.DOCKER_PROFILES_DIR,docker_config.NEW_DOCKER_PROFILE)
+    if len(docker_config.DOCKER_PROFILES_DIR) > 0:
+        profile_dir = docker_config.DOCKER_PROFILES_DIR
+    else:
+        profile_dir = os.path.dirname(os.path.abspath(__file__))
+    default_profile_path = os.path.join(profile_dir,docker_config.DEFAULT_DOCKER_PROFILE)
+    new_profile_path = os.path.join(profile_dir,docker_config.NEW_DOCKER_PROFILE)
     if os.path.exists(new_profile_path):
         profile_path = new_profile_path
     else:

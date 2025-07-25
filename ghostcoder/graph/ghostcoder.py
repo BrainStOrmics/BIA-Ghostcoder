@@ -128,6 +128,10 @@ def create_ghostcoder_agent(
             task_id = state['task_id']
         except:
             task_id = ghostcoder_config.TASK_ID
+        try:
+            session_id = state['session_id']
+        except:
+            session_id = ghostcoder_config.SESSION_ID
 
 
         docker_profile_dir = docker_config.DOCKER_PROFILES_DIR
@@ -135,6 +139,7 @@ def create_ghostcoder_agent(
         # Parse inputs
         fm_input = {
             "task_id": task_id,
+            "session_id": session_id,
             "docker_profile_dir":docker_profile_dir,
             "max_iter": file_config.MAX_ITER,
         }

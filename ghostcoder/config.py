@@ -130,7 +130,7 @@ class crawler_config:
 
 # For docker
 class docker_config:
-    DOCKER_PROFILES_DIR = current_file_path[:-9]+'docker'
+    DOCKER_PROFILES_DIR = "" 
     DEFAULT_DOCKER_PROFILE = 'BIA_dockers.json'
     NEW_DOCKER_PROFILE = 'docker_images.json'
 
@@ -156,7 +156,7 @@ class ghostcoder_config:
     DB_RETRIEVE = True  
     MAX_ITER = 5
     TASK_ID = "Test"
-    SESSION_ID = "temp"
+    SESSION_ID = ""
 
 # For task spilt
 class splitter_config:

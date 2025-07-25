@@ -28,7 +28,7 @@ Please respond in the following **json** format:
 ```json
 {
    "qualified": bool,  //Set to `true` if the code largely meets standards and needs only minor fixes. Set to `false` if it has major flaws and requires significant correction.
-   "self_critique_reportt":{ // A structured report with the following fields:
+   "self_critique_report":{ // A structured report with the following fields:
       "format compliance":str, // Assess adherence to coding standards. Does it import necessary libraries correctly? Is error handling (e.g., `try-except`) adequate? Is the code well-documented with comments and docstrings? If fully compliant, respond with `All checks passed.`. Otherwise, detail necessary improvements.
       "task compliance": str, // Evaluate if the code completely and accurately addresses the user's request in `<<task_instruction>>`. Is the analytical workflow logical and scientifically sound? Are essential visualizations or outputs generated as expected? If fully compliant, respond with `All checks passed.`. Otherwise, explain the shortcomings.
       "I/O compliance": str, // Review all input/output operations. Are file paths handled safely (e.g., using `pathlib`)? Are output filenames descriptive and logical? Are the correct, non-deprecated functions used for saving data (e.g., `anndata.AnnData.write_h5ad`)? If fully compliant, respond with `All checks passed.`. Otherwise, identify issues.

@@ -50,16 +50,15 @@ The generated Python script **MUST** adhere to the following structure and conte
 
 -----
 
-  - **Language**: The output **MUST** be exclusively in the language specified by `<<language>>`.
+  - **Language**: The output **MUST** be exclusively in the language specified by given language.
   - **Safety**:
       - You **MUST NOT** use unsafe command execution (e.g., Python's `os.system`, R's `system` with untrusted input).
       - You **MUST NOT** use file deletion operations.
   - **Best Practices**: You **MUST** use established, community-accepted libraries and tools for the specified language (e.g., Tidyverse in R, Pandas/Scanpy in Python, coreutils in Bash).
   - **Final Output**: You **MUST** provide the response as a single, complete code block within a markdown fence that is tagged with the target language. Do not include any text outside of the code block.
 
-**Example format:**
-
-```<<language>>
+## Output format
+```bash/python/R
 # Your complete, runnable script in the specified language goes here.
 # It should start with dependency loading/checking...
 # ...and end with the final step of the workflow.
