@@ -67,37 +67,7 @@ def copy_files(source_dir, destination_dir, verbose = False):
 
     return items 
 
-def get_version(command):
-    try:
-        result = subprocess.run(command, capture_output=True, text=True)
-        output = (result.stdout + result.stderr).strip()
-        if output:
-            return output.splitlines()[0]
-        else:
-            return "Unknown"
-    except FileNotFoundError:
-        return "Not installed"
 
-def get_native_env_perception():
-    languages = [
-        {"name": "Python", "command": ["python", "--version"]},
-        #{"name": "Python3", "command": ["python3", "--version"]},
-        {"name": "R", "command": ["R", "--version"]},
-        {"name": "Java", "command": ["java", "-version"]},
-        {"name": "C++", "command": ["g++", "--version"]},
-        {"name": "Node.js", "command": ["node", "--version"]},
-        {"name": "Ruby", "command": ["ruby", "--version"]},
-        {"name": "Go", "command": ["go", "version"]},
-        {"name": "Rust", "command": ["rustc", "--version"]},
-        {"name": "PHP", "command": ["php", "--version"]},
-        {"name": "Perl", "command": ["perl", "-v"]}
-    ]
-    versions = {}
-    for lang in languages:
-        version = get_version(lang["command"])
-        if version != "Not installed":
-            versions[lang["name"]] = version
-    return versions
 
 
 # 编程语言到文件扩展名的映射

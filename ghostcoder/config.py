@@ -56,6 +56,7 @@ def initial_visionmodel(api_config:dict):
 
 def initial_LLMs():
     llm_config.MODELS["chat_model"] = initial_chatmodel(llm_config.CHAT_MODEL_API)
+    llm_config.MODELS["reason_model"] = initial_chatmodel(llm_config.CHAT_MODEL_API)
     llm_config.MODELS["code_model"] = initial_chatmodel(llm_config.CODE_MODEL_API)
     llm_config.MODELS["embed_model"] = initial_embedmodel(llm_config.EMBED_MODEL_API)
     try:
@@ -81,6 +82,12 @@ def load_yaml_config(yaml_path):
 # For LLMs apis
 class llm_config:
     CHAT_MODEL_API = {
+        "api" : "",
+        "url" : "",
+        "model": "",
+        "type": "openai",
+    }
+    REASON_MODEL_API = {
         "api" : "",
         "url" : "",
         "model": "",

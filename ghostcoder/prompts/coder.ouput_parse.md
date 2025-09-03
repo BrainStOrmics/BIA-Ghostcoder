@@ -22,21 +22,7 @@ A piece of code executes and produces output, please analyze the code execution 
   - The primary failure reason if multiple errors are present (focus on the most critical one).
 - **Outcome**: A clear and concise error description to be used in the next step.
 
-## Step 3: Evaluate Error Complexity
-- **Action**: Analyze the error identified in Step 2 to determine its complexity.
-- **Goal**: Decide whether the error can be resolved with general knowledge or requires external research.
-- **Criteria**:
-  - **Straightforward Errors** (no web search needed):
-    - Simple issues like syntax errors (e.g., missing semicolon), typos, undefined variables, or incorrect indentation.
-    - Example: "IndentationError: expected an indented block".
-  - **Complex Errors** (web search likely needed):
-    - Issues tied to specific bioinformatics tools, libraries, or domain knowledge.
-    - Example: "BLAST error: unrecognized parameter" or "Biopython module not found".
-- **Outcome**:
-  - Set `"need web search"` to `False` for straightforward errors.
-  - Set `"need web search"` to `True` for complex errors.
-
-## Step 4: Format the Results
+## Step 3: Format the Results
 - **Action**: Compile the findings from the previous steps into a structured JSON output as follow:
 
 ### Output format
@@ -46,5 +32,5 @@ Please respond in the following **json** format:
 {
    "error occurs": bool, // If there is any error occurs when execute the code,`True` or `False`.
    "error": str, // A natural language description of error that can be used by other LLMs to generate keywords for web searches., if there is no error here fill in the "" (an empty str).
-   "need web search": bool // Whether or not to fix this issue requires a web search, `True` or `False`.
 }
+```

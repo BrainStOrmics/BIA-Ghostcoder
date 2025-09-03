@@ -1,4 +1,5 @@
 temp/
+ghostcoder/prompts/old
 local_tests/
 *.h5ad
 Example/Test/

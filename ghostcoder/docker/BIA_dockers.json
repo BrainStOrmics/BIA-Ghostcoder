@@ -9,14 +9,14 @@
       },
       {
          "name": "python",
-         "tag": "latest",
+         "tag": "3.9.23-bullseye",
          "description":"Basic python environment, does not contain any packages.",
          "languages": "Python, Bash",
          "packages": "None specific" 
       },
       {
          "name": "r-base",
-         "tag": "latest",
+         "tag": "4.3.2",
          "description":"Basic R environment, does not contain any packages.",
          "languages": "R, Bash",
          "packages": "None specific"

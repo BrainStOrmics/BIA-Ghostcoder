@@ -1,3 +1,4 @@
+import logging
 from ..utils import *
 from ..prompts import load_prompt_template
 from .webcrawler import create_crawler_agent
@@ -19,10 +20,17 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.pregel import RetryPolicy
 #from langgraph.types import interrupt
 
+#----------------
+# Initial logging
+#----------------
+logger = logging.getLogger(__name__)
 
-
+#----------------
+# Agent orchestration
+#----------------
 def create_coder_agent(
     chat_model: LanguageModelLike,
+    reason_model: LanguageModelLike,
     code_model: LanguageModelLike,
     *,
     max_retry = 3,
@@ -41,34 +49,39 @@ def create_coder_agent(
 
     class State(TypedDict):
         #input
-        session_id: str
+        # session_id: str # Moved to config
         task_instruction: str 
         ref_codeblocks: str
         previous_codeblock: str
         data_perception: str
-        env_profiles: str
+        # env_profiles: str # Moved to config
 
-        #parameter
+        #tracing parameter
         n_iter: int
         n_error: int 
-        critique_status: bool
-        error_status: bool
-        websearch: bool
+        # websearch: bool # Moved to config
 
         #generated
-        generated_codeblock: Annotated[list[str], operator.add]
-        critique: str
-        execution_outstr: str
+        generated_codeblock: Annotated[list[str], operator.add] # Generated code, save history for version control 
+        critique: Annotated[list[str], operator.add] # Critique of the generated code
+        execution_outstr: Annotated[list[str], operator.add]  # Execution output string
+        error_status: bool
         error_summary: str
-        web_summary: str
-        error_solution: str
+        web_summary: str # Summary of related web search for the error
+        error_solution: str # Solution of fix the error
+        
+        #decision status
+        critique_status: bool # Whether the code satisfied to the user's intention
+        fix_type: str # Type of the error, to debug the code or manage packages
 
     #----------------
     # Load subgraphs
     #----------------
     # Get crawler subgraph 
+    logger.debug("Loading crawler subgraph.")
     crawler_subgraph = create_crawler_agent(
         chat_model = chat_model, 
+        reason_model = reason_model,
         code_model = code_model,
         max_retry = max_retry,
         name =  "crawler_subgraph",
@@ -80,8 +93,10 @@ def create_coder_agent(
         debug = debug,
         )
     
+    logger.debug("Loading executor subgraph.")
     executor_subgraph = create_executor_agent(
         chat_model = chat_model, 
+        reason_model = reason_model,
         code_model = code_model,
         max_retry = max_retry,
         name =  "executor_subgraph",
@@ -103,116 +118,137 @@ def create_coder_agent(
         previous code, generated code, and reference code blocks. It uses an LLM to generate the code
         and handles retries if the invocation fails.
         """
+        logger.debug("START node_code_generation")
+        logger.info("============coder============\nStarting coder subagent...\n")
 
-        # Pass inputs
+        # 1. Pass inputs
+        # 1.1 Basic inputs
         task_instruction = state['task_instruction']
-        data_perception = state['data_perception']
-        previous_codeblock = state['previous_codeblock']
-        ref_codeblocks = state['ref_codeblocks']
+        try:
+            generated_codeblock = state['generated_codeblock'][-1]
+        except:
+            generated_codeblock = ""
         try:
             n_iter = state["n_iter"]
         except:
             n_iter = 0
-        
+        logger.debug("task_instruction: "+str(task_instruction))
+        logger.debug("data_perception: "+str(data_perception))
+        logger.info("Start #"+str(n_iter)+" iteration of code generation.")
+        # 1.2 In a continues workflow
+        previous_codeblock = state['previous_codeblock']
+        logger.debug("previous_codeblock: "+str(previous_codeblock))
+        # 1.3 When reference provided
+        ref_codeblocks = state['ref_codeblocks']
+        logger.debug("ref_codeblocks: "+str(ref_codeblocks))
+        # 1.4 When working in code improvement loop
+        try:
+            critique = state['critique']
+        except:
+            critique = ""
+        logger.debug("critique:"+str(critique))
+        logger.debug("generated_codeblock:"+str(generated_codeblock))
+        # 1.5 When working in error fix loop
         try:
             error_status = state['error_status']
             execution_outstr = state['execution_outstr']
         except:
             error_status = False
+        logger.debug("error_status:"+str(error_status))
+        # 1.6 Parse output paths
+        fig_dir = file_config.FIGURE_DIR
+        out_dir = file_config.OUTPUT_DIR
+        output_paths = '--output_data_dir: '+out_dir + '\n--output_figure_dir'+ fig_dir
+        logger.debug("Output paths: "+output_paths)
 
-        try:
-            generated_codeblock = state['generated_codeblock'][-1]
-        except:
-            generated_codeblock = ""
-
-        try:
-            critique = state['critique']
-        except:
-            critique = ""
-
-        try: 
-            error_solution = state['error_solution']
-        except:
-            error_solution = ""
-        try:
-            session_id = state['session_id']
-        except:
-            session_id = ghostcoder_config.SESSION_ID
-
-        # Parse human input
+        # 2. Parse human input and Task Instruction
         human_input = "## Data  \nThe current code block serves the following data files:\n" + data_perception + '\n'
-        
-        # For error fix
+        # 2.1  When working in error fix loop
         if error_status:
-            human_input += "## Error fix  \nYour previously code had the following error:\n" + execution_outstr + "\n"
-            human_input += "## Your code  \nThe code you generated for the above task is as follows, fix those error:\n" + generated_codeblock + "\n"
-            if len(error_solution) > 0:
-                human_input += "## Fix solution  \nFollowing are web searched solutions to help with fix above errors:\n" + error_solution
+            logger.info("Switch to error fix mode.")
+            # 2.1.1 Edit task instruction
+            task_instruction = "Please fix the errors. The code and error output encountered are attached at the end."
+            # 2.1.2 Edit human input
+            human_input += "## Error fix  \n### Your previously code had the following error:\n" + execution_outstr + "\n"
+            human_input += "### The code you generated for the above task is as follows, fix those error:\n" + generated_codeblock + "\n"
 
-        # For iterated code generation with critique
+        # 2.2 When working in code improvement loop
         elif len(critique) > 0:
+            logger.info("Switch to iterated code generation mode.")
+            # 2.2.1 Edit task instruction
+            task_instruction = "When generating code for the following tasks:\n" + task_instruction "\nThe generated code does not fully meet expectations. The suggestions received provided latter; please re-optimize the code." 
+            # 2.2.2 Edit human input
             human_input += "\n## Critique  \nUsers think your code has the following defects:  \n"+ critique +"\n"
-            human_input += "## Your code  \nThe code you generated for the above task is as follows, please modify and enhance it according to the instructions above.\n" + generated_codeblock
-
+            human_input += "### The code you generated for the above task is as follows, please modify and enhance it according to the instructions above.\n" + generated_codeblock
+        # 2.3 When generate new code
         else:
-            # For continued workflow, 1st iteration 
+            log_str = "Generating new code block..."
+        # 2.3.1 Edit task instruction
+            task_instruction = "Generate a code block to accomplish the following task:\n" + task_instruction + "\nWhile following the code generation procedure, you can also obtain additional useful information from the subsequent user input provided."
+        # 2.3.2 In a continues workflow
             if len(previous_codeblock) > 0:
+                log_str += " with previous code..."
+                # Edit human input
                 human_input += "\nThe previous code in the workflow to which the current code belongs is as follows, please use the same coding style as it:\n" + previous_codeblock
-
-            # When RAG is available 
+        # 2.3.3 When reference code is available 
             if len(ref_codeblocks) > 0:
+                log_str += " with reference code block(s)..."
+                # Edit human input
                 few_shots = "## Reference code blocks\nSome code blocks you can refer to that accomplish similar tasks, but the specific details may differ from this task:\n" 
                 i = 1
                 for cb in ref_codeblocks:
                     few_shots += "### Reference code #" + str(i) + "\n" 
                     few_shots += cb + "\n\n" 
                 human_input += few_shots
+            logger.info(log_str)
+        logger.debug("human_input: %s", human_input)
 
-
-        # Call prompt template
+        # 3. Prepare LLM input
+        # 3.1 Call prompt template
         prompt, input_vars = load_prompt_template('coder.script_gen')
-
-        # Construct input message
+        logger.debug("prompt:"+str(prompt))
+        
+        # 3.2 Construct input message
         message = [
             SystemMessage(content=prompt.format(
                 task_instruction = task_instruction,
-                output_dir = os.path.join(
-                    file_config.WORK_DIR, 
-                    session_id,
-                    ghostcoder_config.TASK_ID, 
-                    file_config.OUTPUT_DIR),
-                figure_dir = os.path.join(
-                    file_config.WORK_DIR,
-                    session_id,
-                    ghostcoder_config.TASK_ID, 
-                    file_config.FIGURE_DIR)
-                )),
+                output_dir = output_paths)),
             HumanMessage(content=human_input)
         ]
 
-        # Generate code with llm
+        # 4. Generate code with llm
+        # 4.1 Construct LLM chain
+        chain = code_model | JsonOutputParser()
+        # 4.2 Invoke LLM with retry
         i = 0
+        logger.info("Start generating code block with LLM...")
         while i < max_retry:
             try:
-                response = code_model.invoke(message)
+                response = chain.invoke(message)
                 #code_block = extract_python_codeblock(response.content) # No longer limited to python code anymore
-                code_block = response.content
+                code_block = response['code_block']
+                script_type = response['script_type']
+                logger.info("Successfully generated code block.")
+                logger.debug("generated code block: "+str(code_block))
+                logger.debug("generated script type: "+str(script_type))
                 break
             except Exception as e:
                 i+=1
                 if i == max_retry:
-                    print(f"Error generating code: {e}")
+                    logger.exception("Get exception when generating code:")
                     raise  
-
+                else:
+                    logger.debug("Get exception when generating code:\n"+str(e))
         # Handle failure after maximum retries
         if code_block is None:
             raise RuntimeError("Failed to generate code after maximum retries.")
-        
         # Update iteration 
         n_iter += 1
         
+        logger.debug("END node_env_parser")
         return {
             'generated_codeblock':[code_block],
+            'scrpt_type': script_type
             'n_iter':n_iter
         }
 
@@ -222,6 +258,7 @@ def create_coder_agent(
         This function evaluates the generated code using an LLM and provides a critique.
         It determines if the code is qualified and generates a self critique report.
         """
+        logger.debug("START node_criticism")
 
         # Pass inputs
         task_instruction = state['task_instruction']
@@ -229,9 +266,11 @@ def create_coder_agent(
 
         # Parse human input
         human_input = "## Codes to be evaluated  \nThe code you generated for the above task is as follows, please conduct an evaluation:\n" + generated_codeblock
+        logger.debug("human_input: "+str(human_input))
 
         # Call prompt template
         prompt, input_vars = load_prompt_template('coder.critisim')
+        logger.debug("prompt:"+str(prompt))
 
         # Construct input message
         message = [
@@ -240,7 +279,8 @@ def create_coder_agent(
         ]
 
         # Generate critique with llm
-        chain = code_model | JsonOutputParser()
+        logger.info("Critique generated code block with LLM...")
+        chain = reason_model | JsonOutputParser()
         i = 0
         while i < max_retry: 
             try:
@@ -248,22 +288,28 @@ def create_coder_agent(
                 critique_status = json_output['qualified']
                 critique = json_output['self_critique_report']
                 critique = critique_report_2md(critique)
+                logger.info("Successfully generated critique.")
+                logger.debug("critique_status: "+str(critique_status))
+                logger.debug("critique: "+str(critique))
                 break
             except Exception as e:
                 i+=1
                 if i == max_retry:
-                    print(f"Error generating critique due to: \n{e}")
+                    logger.exception("Get exception when generating critique:")
                     raise  
-
+                else:
+                    logger.debug("Get exception when generating critique:\n"+str(e))
+        
+        logger.debug("END node_criticism")
         return {
             'critique_status':critique_status, 
             'critique': critique
         }
 
-
     async def node_executor(state:State):
         """
         """
+        logger.debug("START node_executor")
 
         # Pass inputs
         generated_codeblock = state['generated_codeblock'][-1]
@@ -277,8 +323,10 @@ def create_coder_agent(
             "generated_codeblock": code_blocks[0], # ONLY use 1st code block
             "env_profiles": env_profiles
         }
+        logger.debug("subgraph_input: "+str(subgraph_input))
 
         # Invoke executor subgraph 
+        logger.info("Calling executor subagent from node_executor...")
         subgraph_states = await executor_subgraph.ainvoke(
             subgraph_input,
             config = config_schema
@@ -286,26 +334,16 @@ def create_coder_agent(
         
         # Parse subgraph results
         execution_outstr = subgraph_states['execution_results']
-
-        return {
-            'execution_outstr': execution_outstr
-        }
-
-
-    def node_output_parser(state:State):
-        """
-        This function parses the output of code execution to determine if there was an error
-        and if web search is needed. It uses an LLM to interpret the output.
-        """
-        
-        # Pass inputs
-        execution_outstr = state['execution_outstr']
+        logger.info("Successfully executed code block.")
+        logger.debug("execution_outstr: "+str(execution_outstr))
 
         # Parse human input
         human_input = "The code excuted with folloing outputs:\n" + execution_outstr
+        logger.debug("human_input: "+str(human_input))
 
         # Call prompt template
         prompt, input_vars = load_prompt_template('coder.ouput_parse')
+        logger.debug("prompt:"+str(prompt))
 
         # Construct input message
         message = [
@@ -314,28 +352,39 @@ def create_coder_agent(
             ]
 
         # Parse execution output with llm
-        chain = code_model | JsonOutputParser()
+        logger.info("Parse execution output with LLM...")
+        chain = chat_model | JsonOutputParser()
         i = 0
         while i < max_retry: 
             try:
                 response = chain.invoke(message)
                 error_status = response['error occurs']
-                websearch = response['need web search']
                 error_summary = response['error']
+                logger.info("Successfully parsed execution output.")
+                logger.debug("error_status: "+str(error_status))
+                logger.debug("error_summary: "+str(error_summary))
                 break
             except Exception as e:
                 i+=1
                 if i == max_retry:
-                    print(f"Error generating code: {e}")
+                    logger.exception("Get exception when parsing execution output:")
                     raise  
+                else:
+                    logger.debug("Get exception when parsing execution output:\n"+str(e))
 
+        logger.debug("END node_executor")
         return{
+            'execution_outstr': execution_outstr,
             'error_status':error_status,
-            'websearch':websearch,
             'error_summary':error_summary
         }
+
     
     def node_webcrawler(state:State):
+        """
+        """
+        logger.debug("START node_webcrawler")
+
         # Pass inputs
         generated_codeblock = state['generated_codeblock'][-1]
         error_summary = state['error_summary']
@@ -345,8 +394,10 @@ def create_coder_agent(
         subgraph_input = {
             "query_context": query_context
         }
+        logger.debug("subgraph_input: "+str(subgraph_input))
 
         # Get error fix web search solution by subgraph
+        logger.info("Calling crawler subagent from node_webcrawler...")
         subgraph_states = crawler_subgraph.invoke(
             subgraph_input,
             config = config_schema
@@ -354,95 +405,130 @@ def create_coder_agent(
 
         # Parse result
         summary = subgraph_states['summary']
+        logger.info("Successfully parsed crawler subgraph output.")
+        logger.debug("summary: "+str(summary))
         
+        logger.debug("END node_webcrawler")
         return {
             "web_summary":summary
         }
 
+    # def node_debug_consultant(state:State):
+    #     """
+    #     This function fixes errors in the generated code using information from data perception
+    #     and potentially web solutions. It updates the generated code and iteration counters.
+    #     """
+    #     logger.debug("START node_debug_consultant")
+
+    #     # Pass inputs
+    #     error_summary = state['error_summary']
+    #     generated_codeblock = state['generated_codeblock'][-1]
+    #     try:
+    #         web_summary = state['web_summary']
+    #         logger.debug("With web summary: "+str(web_summary))
+    #     except:
+    #         web_summary = ""
+    #         logger.debug("Without web summary")
+
+    #     data_perception = state['data_perception']
+
+    #     try:
+    #         n_error = state['n_error']
+    #     except:
+    #         n_error = 0
+    #     logger.info("Trying to resolve error in "+str(n_error)+" times.")
+
+    #     n_iter = state['n_iter']
+    #     logger.debug("n_iter: "+str(n_iter))
+
+    #     # Parse human input
+    #     human_input = "## Original code  \n" + generated_codeblock +"\n\n"
+    #     human_input += "## Data information  \n" + data_perception +"\n\n"
+    #     human_input += "## Error message  \nThe error message and related information as follow:" +"\n---\n"
+    #     human_input += error_summary +"\n---\n"
+    #     if len(web_summary)>1:
+    #         human_input += "## Web solution  \nSearching through the web, the recommended solutions are as follows:" +"\n---\n" + web_summary
+    #     logger.debug("human_input: "+str(human_input))
+
+    #     # Call prompt template
+    #     prompt, input_vars = load_prompt_template('coder.gen_fixsolut')
+    #     logger.debug("prompt:"+str(prompt))
+
+    #     # Construct input message
+    #     message = [
+    #         SystemMessage(content=prompt.format()),
+    #         HumanMessage(content=human_input)
+    #     ]
+
+    #     # Fix code error with llm
+    #     logger.info("Start code error fix consulting with LLM...")
+    #     i = 0
+    #     while i < max_retry: 
+    #         try:
+    #             print("Fixing error code.")
+    #             response = code_model.invoke(message)
+    #             logger.info("Successfully fixed code error.")
+    #             logger.debug("error_solution: "+str(response.content))
+    #             break
+    #         except Exception as e:
+    #             i+=1
+    #             if i == max_retry:
+    #                 logger.exception("Get exception when fixing code error:")
+    #                 raise  
+    #             else:
+    #                 logger.debug("Get exception when fixing code error:\n"+str(e))
         
+    #     # Update iteration 
+    #     n_error += 1
+    #     n_iter -= 1
 
-    def node_debugger(state:State):
-        """
-        This function fixes errors in the generated code using information from data perception
-        and potentially web solutions. It updates the generated code and iteration counters.
-        """
-
-        # Pass inputs
-        error_summary = state['error_summary']
-        generated_codeblock = state['generated_codeblock'][-1]
-        try:
-            web_summary = state['web_summary']
-        except:
-            web_summary = ""
-
-        data_perception = state['data_perception']
-
-        try:
-            n_error = state['n_error']
-        except:
-            n_error = 0
-        n_iter = state['n_iter']
-
-        # Parse human input
-        human_input = "## Original code  \n" + generated_codeblock +"\n\n"
-        human_input += "## Data information  \n" + data_perception +"\n\n"
-        human_input += "## Error message  \nThe error message and related information as follow:" +"\n---\n"
-        human_input += error_summary +"\n---\n"
-        if len(web_summary)>1:
-            human_input += "## Web solution  \nSearching through the web, the recommended solutions are as follows:" +"\n---\n" + web_summary
-
-        # Call prompt template
-        prompt, input_vars = load_prompt_template('coder.gen_fixsolut')
-
-        # Construct input message
-        message = [
-            SystemMessage(content=prompt.format()),
-            HumanMessage(content=human_input)
-        ]
-
-        # Fix code error with llm
-        i = 0
-        while i < max_retry: 
-            try:
-                print("Fixing error code.")
-                response = code_model.invoke(message)
-                break
-            except Exception as e:
-                i+=1
-                if i == max_retry:
-                    print(f"Error generating code: {e}")
-                    raise  
-        
-        # Update iteration 
-        n_error += 1
-        n_iter -= 1
-
-        return {
-            'error_solution':response.content, 
-            'n_error':n_error,
-            'n_iter':n_iter
-        }
+    #     logger.debug("END node_debug_consultant")
+    #     return {
+    #         'error_solution':response.content, 
+    #         'n_error':n_error,
+    #         'n_iter':n_iter
+    #     }
 
     #----------------
     # Define conditional edges
     #----------------
 
+    def router_skip_critic(state:State):
+        logger.debug("START router_skip_critic")
+        if state['scrpt_type'] == 'env':
+            logger.debug("SELECT executor: code block for env profiling, skil critic")
+            logger.debug("END router_skip_critic")
+            return "exe"
+        else:
+            logger.debug("SELECT critic: code block for workflow, need reflection")
+            logger.debug("END router_skip_critic")
+            return "critic"
+
     def router_is_codeblock_qualified(state:State):
+        logger.debug("START router_is_codeblock_qualified")
         if state['n_iter'] < coder_config.MAX_CRITIQUE:
             if state['critique_status']:
+                logger.debug("SELECT continue: code block qualified, continue to executor")
+                logger.debug("END router_is_codeblock_qualified")
                 return "continue"
             else:
+                logger.debug("SELECT regen: code block not qualified, regen")
+                logger.debug("END router_is_codeblock_qualified")
                 return "regen"
         else: 
+            logger.debug("SELECT continue: code block not qualified, max iteration reached, continue to executor")
+            logger.debug("END router_is_codeblock_qualified")
             return "continue"
         
     def router_is_error_occur(state:State):
+        logger.debug("START router_is_error_occur")
         if state['error_status']:
-            if state['websearch']:
-                return "websearch"
-            else:
-                return "errorfix"
+            logger.debug("SELECT errorfix: error occur, continue to error fix")
+            logger.debug("END router_is_error_occur")
+            return "errorfix"
         else:
+            logger.debug("SELECT end: no error, end the wrkflow")
+            logger.debug("END router_is_error_occur")
             return "end"
         
     #----------------
@@ -455,12 +541,18 @@ def create_coder_agent(
     builder.add_node("Code generation", node_code_generation)
     builder.add_node("Criticism",node_criticism)
     builder.add_node("Executor",node_executor)
-    builder.add_node("Output parser",node_output_parser)
     builder.add_node("Webcrawler",node_webcrawler)
-    builder.add_node("Consultant",node_debugger)
+    #builder.add_node("Consultant",node_debug_consultant)
     # add edges
     builder.add_edge(START,"Code generation")
-    builder.add_edge("Code generation", "Criticism")
+    builder.add_conditional_edges(
+        "Code generation", 
+        router_skip_critic,
+        {
+            "exe"  : "Executor", 
+            "exe"     : "Criticism"}
+        )
+    #builder.add_edge("Code generation", "Criticism")
     builder.add_conditional_edges(
         "Criticism", 
         router_is_codeblock_qualified,
@@ -468,16 +560,14 @@ def create_coder_agent(
             "continue"  : "Executor", 
             "regen"     : "Code generation"}
         )
-    builder.add_edge("Executor", "Output parser")
     builder.add_conditional_edges(
-        "Output parser", 
+        "Executor", 
         router_is_error_occur,
         {
-            "websearch" : "Webcrawler", 
-            "errorfix"  : "Consultant", 
+            "errorfix"  : "Webcrawler", #"Consultant", 
             "end"       : END}
         )
-    builder.add_edge("Webcrawler","Consultant")
+    builder.add_edge("Webcrawler","Code generation")#"Consultant")
     
     return builder.compile(
         checkpointer=checkpointer,

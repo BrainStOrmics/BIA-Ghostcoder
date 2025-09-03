@@ -1,7 +1,7 @@
+import logging
 from ..utils import *
 from ..prompts import load_prompt_template
-from .webcrawler import create_crawler_agent
-
+from ..config import coder_config
 
 from typing import TypedDict, Annotated, Optional, Type, Any
 #langchain
@@ -22,7 +22,14 @@ from autogen_core.code_executor import CodeBlock
 from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
 from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
 
+#----------------
+# Initial logging
+#----------------
+logger = logging.getLogger(__name__)
 
+#----------------
+# Agent orchestration
+#----------------
 def create_executor_agent(
     chat_model: LanguageModelLike,
     code_model: LanguageModelLike,
@@ -44,7 +51,7 @@ def create_executor_agent(
     class State(TypedDict):
         #input
         generated_codeblock: str 
-        env_profiles: dict 
+        env_profiles: dict  
 
         #generated
         language: str
@@ -64,19 +71,42 @@ def create_executor_agent(
     def node_env_parser(state:State):
         """
         """
-
+        logger.debug("START node_env_parser")
+        logger.info("============executor============\nStarting executor subagent...\n")
         # Pass inputs
+        logger.info("Parsing env...")
         generated_codeblock = state['generated_codeblock']
-        env_profiles = state['env_profiles']
+        try: 
+            env_profiles = state['env_profiles']
+            logger.info("Using given env profiles from graph input.")
+        except: 
+            env_profiles = get_env_profiles()
+            logger.info("Using default env profiles from config.")
 
         # Call prompt template
         prompt, input_vars = load_prompt_template('executor.router')
+        logger.debug(
+            "Using prompt:\n--------prompt--------\n"+
+            str(prompt)+
+            "\n----------------")
 
         # Parse human input
         human_input = "## Code block to execute:  \n" +  generated_codeblock + "\n"
         human_input += "## Runtime environment profiles:\n"
         human_input += "### Native environment" + str(env_profiles['native env languages']) + "\n"
         human_input += "### Docker images: \n" +  env_profiles['docker status'] + "\n"
+
+        logger.info(
+            "Code to be executed:\n--------code block--------\n"+
+            str(generated_codeblock)+
+            "\n----------------",
+            )
+
+        logger.debug(
+            "Detailed env profiles:\n--------env profiles--------\n"+
+            str(env_profiles)+
+            "\n----------------",
+            )
 
         # Construct input message
         message = [
@@ -97,14 +127,37 @@ def create_executor_agent(
                 need_wrapped = json_output['need_wrapped']
                 script_file = json_output['script_file']
                 bash_cmd = json_output['bash_cmd']
-                
+                # To log
+                if need_wrapped:
+                    logger.info(
+                        "".join([
+                            "LLM response:\n----------------",
+                            "\ncoding language:",language,
+                            "\nto use docker:",str(use_docker),', with docker image:', docker_image,
+                            "\nto warp the code block:",str(need_wrapped),', to file',script_file,
+                            '\nwith bash cmd:\n',bash_cmd,
+                            "\n----------------",
+                        ])
+                        )
+                else:
+                    logger.info(
+                        "".join([
+                            "LLM response:\n--------",
+                            "coding language:",language,
+                            "\nto use docker:",str(use_docker),', with docker image:', docker_image,
+                            "\nto warp the code block:",str(need_wrapped),
+                            "\n----------------",
+                        ])
+                        )
                 break
 
             except Exception as e:
                 i+=1
                 if i == max_retry:
-                    print(f"Error choosing env due to: \n{e}")
-
+                    logger.exception("Get exception with"+str(i)+"tries:\n")
+                else:
+                    logger.debug("Get exception when parsing env:\n"+str(e))
+        logger.debug("END node_env_parser")
         return{
             "language": language,
             "use_docker": use_docker,
@@ -117,11 +170,13 @@ def create_executor_agent(
     def node_script_wrapper(state:State):
         """
         """
+        logger.debug("START node_script_wrapper")
+
         # Pass inputs
         generated_codeblock = state['generated_codeblock']
         script_file = state['script_file']
         env_profiles = state['env_profiles']
-        target_file_path = os.path.join(env_profiles['task_dirs']['task_dir'], script_file)
+        target_file_path = os.path.join(env_profiles['task_dirs']['task_home'], script_file)
 
         # Write to script file, 
         #--------
@@ -130,12 +185,13 @@ def create_executor_agent(
         with open(target_file_path, 'w', encoding = 'utf-8') as f:
             f.write(generated_codeblock)
 
-        return{
-        }
+        logger.info("Successfully wrapped code blocks to"+target_file_path)
+        logger.debug("END node_script_wrapper")
 
     async def node_cmd_execute(state:State):
         """
         """
+        logger.debug("START node_cmd_execute") 
 
         # Pass inputs
         generated_codeblock = state['generated_codeblock']
@@ -147,7 +203,7 @@ def create_executor_agent(
         env_profiles = state['env_profiles']
 
         # Parse env profiles
-        task_dir = env_profiles['task_dirs']['task_dir']
+        task_dir = env_profiles['task_dirs']['task_home']
 
         # Parse code to run directly
         if need_wrapped:
@@ -156,34 +212,50 @@ def create_executor_agent(
                 bash_cmd = extract_code_blocks(bash_cmd)[0]
             exe_code = bash_cmd
             use_language = "bash"
+            logger.info("Ready to execute warpped code block.")
         else:
             exe_code = generated_codeblock
             use_language = language
+            logger.info("Ready to execute code block.")
         
         #print(exe_code)
         #print(use_docker)
         #print(docker_image)
-        # Call executor
-        if use_docker:
-            try:
-                executor = DockerCommandLineCodeExecutor(
-                    image = docker_image, 
-                    timeout = 60, 
-                    work_dir= task_dir, # Use the task main dir to store the code files.
-                    #bind_dir="./", # Path inside the docker
-                    delete_tmp_files  = True,
-                )   
-            except Exception as e:
-                print(f"Error create docker cmd executor due to: \n{e}")
-        else: 
-            try:
-                executor = executor = LocalCommandLineCodeExecutor(
-                    timeout=30,  # Timeout for each code execution in seconds.
-                    work_dir=task_dir,  # Use the task main dir to store the code files.
-                )
-            except Exception as e:
-                print(f"Error create local cmd executor due to: \n{e}")
 
+        # 1. Check if EXECUTOR already exist
+        if hasattr(coder_config, 'EXECUTOR') and coder_config.EXECUTOR is not None:
+            executor = coder_config.EXECUTOR
+            logger.info("Using created executor.")
+        else:
+            # Create executor
+            if use_docker:
+                try:
+                    executor = DockerCommandLineCodeExecutor(
+                        image = docker_image, 
+                        timeout = 60, 
+                        work_dir= task_dir, # Use the task main dir to store the code files.
+                        #bind_dir="./", # Path inside the docker
+                        delete_tmp_files  = True, # All code history saved in memory, no need temp code files
+                        auto_remove = False, # Do not auto remove container, for consistent running env 
+                        stop_container = False, # Do not auto stop container
+                    )   
+                    logger.info("Created new docker cmd executor with docker image:"+docker_image)
+                except Exception as e:
+                    logger.exception("Get exception when creating docker executor:")
+                    # print(f"Error create docker cmd executor due to: \n{e}")
+            else: 
+                try:
+                    executor = LocalCommandLineCodeExecutor(
+                        timeout=30,  # Timeout for each code execution in seconds.
+                        work_dir=task_dir,  # Use the task main dir to store the code files.
+                    )
+                    logger.info("Created new native env cmd executor.")
+                except Exception as e:
+                    logger.exception("Get exception when creating native executor:")
+                    # print(f"Error create local cmd executor due to: \n{e}")
+        # Update Executor
+        coder_config.EXECUTOR = executor
+        
         # Execute codes
         try:
             async with executor:
@@ -196,16 +268,20 @@ def create_executor_agent(
                     ],
                     cancellation_token=CancellationToken(),
                 )
+                logger.info("Successfully executed code block.")
+                logger.debug("with output:\n" + exe_result.output)
         except Exception as e:
-            print(f"Error executor code due to: \n{e}")
+            logger.exception("Get exception when running executor:")
+            #print(f"Error executor code due to: \n{e}")
 
         # Parse execution result
         output = exe_result.output
         execution_results = "Code executed with output:\n" + output + "\n"
         #exit_code = exe_result.exit_code
         #execution_results = "Code executed with exit code "+ str(exit_code) +"\n"
-        
-        print(execution_results)
+
+        logger.info("End executor subagent...\n============executor============\n")
+        logger.debug("END node_cmd_execute")
 
         return{
             'execution_results': execution_results,
@@ -216,9 +292,15 @@ def create_executor_agent(
     #----------------
 
     def router_wrap(state:State):
+        logger.debug("START router_wrap")
         if state['need_wrapped']:
+            logger.debug("SELECTED wrapper IN router_wrap")
+            logger.debug("END router_wrap")
             return "wrapper"
+            
         else:
+            logger.debug("SELECTED execute IN router_wrap")
+            logger.debug("END router_wrap")
             return "execute"
         
         
