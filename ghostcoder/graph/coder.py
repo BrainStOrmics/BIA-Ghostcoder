@@ -63,7 +63,7 @@ def create_coder_agent(
 
         #generated
         generated_codeblock: Annotated[list[str], operator.add] # Generated code, save history for version control 
-        critique: Annotated[list[str], operator.add] # Critique of the generated code
+        comment: Annotated[list[str], operator.add] # Critique of the generated code
         execution_outstr: Annotated[list[str], operator.add]  # Execution output string
         error_status: bool
         error_summary: str
@@ -143,10 +143,10 @@ def create_coder_agent(
         logger.debug("ref_codeblocks: "+str(ref_codeblocks))
         # 1.4 When working in code improvement loop
         try:
-            critique = state['critique']
+            comment = state['comment']
         except:
-            critique = ""
-        logger.debug("critique:"+str(critique))
+            comment = ""
+        logger.debug("critique comment:"+str(comment))
         logger.debug("generated_codeblock:"+str(generated_codeblock))
         # 1.5 When working in error fix loop
         try:
@@ -173,12 +173,12 @@ def create_coder_agent(
             human_input += "### The code you generated for the above task is as follows, fix those error:\n" + generated_codeblock + "\n"
 
         # 2.2 When working in code improvement loop
-        elif len(critique) > 0:
+        elif len(comment) > 0:
             logger.info("Switch to iterated code generation mode.")
             # 2.2.1 Edit task instruction
             task_instruction = "When generating code for the following tasks:\n" + task_instruction "\nThe generated code does not fully meet expectations. The suggestions received provided latter; please re-optimize the code." 
             # 2.2.2 Edit human input
-            human_input += "\n## Critique  \nUsers think your code has the following defects:  \n"+ critique +"\n"
+            human_input += "\n## Critique comment\nUsers think your code has the following defects:  \n"+ comment +"\n"
             human_input += "### The code you generated for the above task is as follows, please modify and enhance it according to the instructions above.\n" + generated_codeblock
         # 2.3 When generate new code
         else:
@@ -285,9 +285,9 @@ def create_coder_agent(
         while i < max_retry: 
             try:
                 json_output = chain.invoke(message)
-                critique_status = json_output['qualified']
-                critique = json_output['self_critique_report']
-                critique = critique_report_2md(critique)
+                critique_status = json_output['recommendation']
+                comment = json_output['comment']
+                #critique = critique_report_2md(critique)
                 logger.info("Successfully generated critique.")
                 logger.debug("critique_status: "+str(critique_status))
                 logger.debug("critique: "+str(critique))
@@ -302,8 +302,8 @@ def create_coder_agent(
         
         logger.debug("END node_criticism")
         return {
-            'critique_status':critique_status, 
-            'critique': critique
+            'critique_status': critique_status, 
+            'comment': comment,
         }
 
     async def node_executor(state:State):
@@ -507,7 +507,7 @@ def create_coder_agent(
     def router_is_codeblock_qualified(state:State):
         logger.debug("START router_is_codeblock_qualified")
         if state['n_iter'] < coder_config.MAX_CRITIQUE:
-            if state['critique_status']:
+            if state['critique_status'] == "APPROVE":
                 logger.debug("SELECT continue: code block qualified, continue to executor")
                 logger.debug("END router_is_codeblock_qualified")
                 return "continue"
@@ -550,7 +550,7 @@ def create_coder_agent(
         router_skip_critic,
         {
             "exe"  : "Executor", 
-            "exe"     : "Criticism"}
+            "critic"  : "Criticism"}
         )
     #builder.add_edge("Code generation", "Criticism")
     builder.add_conditional_edges(
