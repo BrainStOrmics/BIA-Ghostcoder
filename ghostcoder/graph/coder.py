@@ -338,7 +338,7 @@ def create_coder_agent(
         logger.debug("execution_outstr: "+str(execution_outstr))
 
         # Parse human input
-        human_input = "The code excuted with folloing outputs:\n" + execution_outstr
+        human_input = "### EXECUTION OUTPUT:\n" + execution_outstr
         logger.debug("human_input: "+str(human_input))
 
         # Call prompt template
@@ -358,8 +358,8 @@ def create_coder_agent(
         while i < max_retry: 
             try:
                 response = chain.invoke(message)
-                error_status = response['error occurs']
-                error_summary = response['error']
+                error_status = response['has_error']
+                error_summary = response['error_summary']
                 logger.info("Successfully parsed execution output.")
                 logger.debug("error_status: "+str(error_status))
                 logger.debug("error_summary: "+str(error_summary))
