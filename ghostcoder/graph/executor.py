@@ -31,7 +31,6 @@ logger = logging.getLogger(__name__)
 # Agent orchestration
 #----------------
 def create_executor_agent(
-    chat_model: LanguageModelLike,
     code_model: LanguageModelLike,
     *,
     max_retry = 3,
@@ -177,15 +176,20 @@ def create_executor_agent(
         script_file = state['script_file']
         env_profiles = state['env_profiles']
         target_file_path = os.path.join(env_profiles['task_dirs']['task_home'], script_file)
+        
+        # Parse code block
+        logger.info("Trying to extract code block from markdown code block")
+        try:
+            generated_codeblock = extract_code_blocks(extract_code_blocks)
+        except:
+            generated_codeblock = generated_codeblock
+            logger.debug("Failed to extract code block from markdown.")
 
-        # Write to script file, 
-        #--------
-        # NOTE: only tested in R
-        #--------
+        # Warp codeblock
         with open(target_file_path, 'w', encoding = 'utf-8') as f:
             f.write(generated_codeblock)
-
         logger.info("Successfully wrapped code blocks to"+target_file_path)
+
         logger.debug("END node_script_wrapper")
 
     async def node_cmd_execute(state:State):
@@ -291,17 +295,17 @@ def create_executor_agent(
     # Define conditional edges
     #----------------
 
-    def router_wrap(state:State):
-        logger.debug("START router_wrap")
-        if state['need_wrapped']:
-            logger.debug("SELECTED wrapper IN router_wrap")
-            logger.debug("END router_wrap")
-            return "wrapper"
+    # def router_wrap(state:State):
+    #     logger.debug("START router_wrap")
+    #     if state['need_wrapped']:
+    #         logger.debug("SELECTED wrapper IN router_wrap")
+    #         logger.debug("END router_wrap")
+    #         return "wrapper"
             
-        else:
-            logger.debug("SELECTED execute IN router_wrap")
-            logger.debug("END router_wrap")
-            return "execute"
+    #     else:
+    #         logger.debug("SELECTED execute IN router_wrap")
+    #         logger.debug("END router_wrap")
+    #         return "execute"
         
         
     #----------------
@@ -316,13 +320,14 @@ def create_executor_agent(
     builder.add_node("Executor",node_cmd_execute)
     # add edges
     builder.add_edge(START, "Env parser")
-    builder.add_conditional_edges(
-        "Env parser", 
-        router_wrap,
-        {               
-            "wrapper"   : "Wrapper", 
-            "execute"   : "Executor"}
-        )
+    builder.add_edge("Env parser","Wrapper")
+    # builder.add_conditional_edges(
+    #     "Env parser", 
+    #     router_wrap,
+    #     {               
+    #         "wrapper"   : "Wrapper", 
+    #         "execute"   : "Executor"}
+    #     )
     builder.add_edge("Wrapper", "Executor")
     builder.add_edge("Executor", END)
     

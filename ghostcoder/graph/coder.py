@@ -81,8 +81,6 @@ def create_coder_agent(
     logger.debug("Loading crawler subgraph.")
     crawler_subgraph = create_crawler_agent(
         chat_model = chat_model, 
-        reason_model = reason_model,
-        code_model = code_model,
         max_retry = max_retry,
         name =  "crawler_subgraph",
         config_schema = config_schema,
@@ -95,8 +93,6 @@ def create_coder_agent(
     
     logger.debug("Loading executor subgraph.")
     executor_subgraph = create_executor_agent(
-        chat_model = chat_model, 
-        reason_model = reason_model,
         code_model = code_model,
         max_retry = max_retry,
         name =  "executor_subgraph",
@@ -119,8 +115,6 @@ def create_coder_agent(
         and handles retries if the invocation fails.
         """
         logger.debug("START node_code_generation")
-        logger.info("============coder============\nStarting coder subagent...\n")
-
         # 1. Pass inputs
         # 1.1 Basic inputs
         task_instruction = state['task_instruction']
@@ -132,6 +126,9 @@ def create_coder_agent(
             n_iter = state["n_iter"]
         except:
             n_iter = 0
+        if n_iter == 0:
+            logger.info("============coder============\nStarting coder subagent...\n")
+
         logger.debug("task_instruction: "+str(task_instruction))
         logger.debug("data_perception: "+str(data_perception))
         logger.info("Start #"+str(n_iter)+" iteration of code generation.")
@@ -176,7 +173,7 @@ def create_coder_agent(
         elif len(comment) > 0:
             logger.info("Switch to iterated code generation mode.")
             # 2.2.1 Edit task instruction
-            task_instruction = "When generating code for the following tasks:\n" + task_instruction "\nThe generated code does not fully meet expectations. The suggestions received provided latter; please re-optimize the code." 
+            task_instruction = "When generating code for the following tasks:\n" + task_instruction + "\nThe generated code does not fully meet expectations. The suggestions received provided latter; please re-optimize the code." 
             # 2.2.2 Edit human input
             human_input += "\n## Critique comment\nUsers think your code has the following defects:  \n"+ comment +"\n"
             human_input += "### The code you generated for the above task is as follows, please modify and enhance it according to the instructions above.\n" + generated_codeblock

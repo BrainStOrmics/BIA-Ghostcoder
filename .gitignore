@@ -1,6 +1,7 @@
 temp/
 ghostcoder/prompts/old
 local_tests/
+Test/test_log.txt
 *.h5ad
 Example/Test/
 Example/DEMO/

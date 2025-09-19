@@ -161,6 +161,7 @@ class file_config:
 # For main graph
 class ghostcoder_config:
     DB_RETRIEVE = True  
+    ALLOW_DATA_PERCEPTION = True
     MAX_ITER = 5
     TASK_ID = "Test"
     SESSION_ID = ""

@@ -31,10 +31,7 @@ logger = logging.getLogger(__name__)
 # Agent orchestration
 #----------------
 def create_filemanager_agent(
-    chat_model: LanguageModelLike,
-    code_model: LanguageModelLike,
     *,
-    max_retry = 3,
     name: Optional[str] = "filemanager_subgraph",
     config_schema: Optional[Type[Any]] = None,
     checkpointer: Optional[Checkpointer] = None,

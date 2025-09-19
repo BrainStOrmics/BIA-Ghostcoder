@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 #----------------
 def create_retriever_agent(
     chat_model: LanguageModelLike,
-    code_model: LanguageModelLike,
     *,
     max_retry = 3,
     name: Optional[str] = "retriever_subgraph",
@@ -60,7 +59,6 @@ def create_retriever_agent(
     # Get crawler subgraph 
     crawler_subgraph = create_crawler_agent(
         chat_model = chat_model, 
-        code_model = code_model,
         max_retry = max_retry,
         name =  "crawler_subgraph",
         config_schema = config_schema,

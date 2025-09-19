@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 #----------------
 def create_crawler_agent(
     chat_model: LanguageModelLike,
-    code_model: LanguageModelLike,
     *,
     max_retry = 3,
     name: Optional[str] = "crawler_subgraph",

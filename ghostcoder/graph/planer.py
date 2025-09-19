@@ -3,7 +3,6 @@ from ghostcoder.prompts import load_prompt_template
 from ghostcoder.config import tavily_config, crawler_config
 from ..config import *
 
-
 from typing import TypedDict, Optional, Type, Any, Annotated
 import operator 
 #langchain
@@ -18,11 +17,20 @@ from langgraph.types import Checkpointer
 from langgraph.store.base import BaseStore
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.pregel import RetryPolicy
+from langgraph.types import interrupt 
 
+#----------------
+# Initial logging
+#----------------
+logger = logging.getLogger(__name__)
 
+#----------------
+# Agent orchestration
+#----------------
 def create_planner_agent(
     chat_model: LanguageModelLike,
-    code_model: LanguageModelLike,
+    reason_model: LanguageModelLike,
+    HILT: bool = False,
     *,
     max_retry = 3,
     name: Optional[str] = "planner_subgraph",
@@ -34,6 +42,9 @@ def create_planner_agent(
     debug: bool = False,
     ) -> CompiledStateGraph:
 
+    if HILT:
+        interrupt_before = ["node_user_feedback"]
+
     #----------------
     # Define graph state
     #----------------
@@ -41,8 +52,9 @@ def create_planner_agent(
     class State(TypedDict):
         #input
         user_input: str
-        guidelines: list 
-        data_dir: str
+        guidelines: list # [optional], better use list format
+        data_dir: str # [optional], default use 
+        max_iter: int # [optional], default use planner_config.MAX_CRITIQUE
         
         #parameter
         n_iter: int
@@ -61,7 +73,6 @@ def create_planner_agent(
     # Get crawler subgraph 
     crawler_subgraph = create_crawler_agent(
         chat_model = chat_model, 
-        code_model = code_model,
         max_retry = max_retry,
         name =  "crawler_subgraph",
         config_schema = config_schema,
@@ -76,77 +87,155 @@ def create_planner_agent(
     # Define nodes
     #----------------
 
-    def node_guideline_webcrawler(state:State):
+    def node_guideline_fetcher(stat:State):
+        """"""
+        logger.debug("START node_guideline_fetcher")
+        logger.infor("============planner============\nStarting planner subagent...\n")
         # Pass inputs
         user_input = state['user_input']
-        websearch = state['websearch']
 
-        # Parse input
-        query = "Please provide a guide line for "+user_input 
-
-        subgraph_input = {
-            "query_context": query
-        }
-
-        if websearch:
-            # Get error fix web search solution by subgraph
-            subgraph_states = crawler_subgraph.invoke(
-                subgraph_input,
-                config = config_schema
-            )
-
-            # Parse result
-            summary = subgraph_states['summary']
+        try:
+            max_iter = state['max_iter']
+        except:
+            max_iter = planner_config.MAX_CRITIQUE
         
-        else: summary = ""
+        try:
+            websearch = state['websearch']
+        except:
+            websearch = False #Set not use websearch as default
 
+        try:
+            guidelines = state['guidelines']
+            logger.debug("User provided guidelines.")
+        except:
+            guidelines = []
+            logger.debug("User not provided guidelines.")
+        logger.debug("User input: "+str(user_input))
+        logger.debug("User webserach"+str(websearch))
+
+        # Use provided guidelines
+        guideline_str = "### Guidelines:\n"
+        if len(guidelines) > 0:
+            logger.info("Use user provided guideline")
+            if type(guidelines) == list:
+                n = 0
+                for g in guidelines: 
+                    guideline_str += "#### Guideline #"+str(n)+":\n"
+                    guideline_str += g + '\n'
+            elif type(guidelines) == str:
+                guideline_str += guidelines + '\n'
+
+        # Or fetch guidelines from web and reformat guideline
+        else: 
+            if websearch:
+                logger.info("Fetch guideline from web search.")
+                # Get error fix web search solution by subgraph
+                subgraph_states = crawler_subgraph.invoke(
+                    subgraph_input,
+                    config = config_schema
+                )
+
+                # Parse result
+                summary = subgraph_states['summary']
+            else: 
+                summary = ""
+                logger.infor("Use no web search.")
+            # Prepare LLM
+            # Call prompt template
+            prompt, input_vars = load_prompt_template('coder.script_gen')
+            logger.debug("prompt:"+str(prompt))
+            # Format LLM input
+            if len(summary) > 0:
+                human_input = "## References from web search as follow:\n" + summary
+            else:
+                human_input = "## No web search available\nPlease gen guildeline based on your knowledge"
+            message = [
+                SystemMessage(content=prompt.format(
+                    user_input = user_input)),
+                HumanMessage(content=human_input)
+            ]
+            # Generate guideline with LLM
+            # Construct LLM chain
+            chain = reason_model | JsonOutputParser()
+            # Invoke LLM with retry
+            i = 0
+            logger.infor("Start reformat workflow guideline with LLM...")
+            while i < max_retry:
+                try:
+                    response = chain.invoke(message)
+                    guideline_str = response['guideline_markdown']
+                    logger.info("Successfully reformat guideline.")
+                    logger.debug("generated guideline: "+str(guideline_str))
+                    break
+                except Exception as e:
+                    i+=1
+                    if i == max_retry:
+                        logger.exception("Get exception when reformat guideline:")
+                        raise  
+                    else:
+                        logger.debug("Get exception when reformat guideline:\n"+str(e))
+
+        # Return
         return {
-            "web_summary":summary
+            "max_iter": max_iter
+            "guidelines": guideline_str,
         }
 
-    def planner(state:State):
+    def node_planner(state:State):
+        """"""
+        logger.info("START node_planner")
         # Pass inputs
         user_input = state['user_input']
-        web_summary = state['web_summary']
         guidelines = state['guidelines']
-        data_dir = state['data_dir']
+
+        try:
+            data_dir = state['data_dir']
+            logger.info("Use defined data dir:"+str(data_dir))
+        except:
+            # Use default data dir 
+            data_dir = str(file_config.DATA_DIR)
+            logger.info("Use default data dir"+str(data_dir))
+
         try:
             critique = state['critique']
+            logger.debug("Got critique:"+str(critique))
         except:
             critique = ""
+            logger.debug("No critique, yet")
+
         try:
-            last_plan = state['plan'][-1]
+            old_plan = state['plan'][-1]
+            logger.debug("Refine plan with last generated.")
         except:
-            last_plan = ""
+            old_plan = ""
+            logger.debug("Generate new plan")
 
         try:
             n_iter = state['n_iter']
         except:
             n_iter = 0
+        logger.info("Start #"+str(n_iter)+" iteration of analysis workflow plan generation")
 
         # Parse inputs
-        guideline_str = ""
-        if len(critique) >0: # if there is critique, no guideline needed
-            human_input = "You've previously generated a plan, and now you want to iteratively optimize your previous plan based on others criticisms of your plan:"
-            human_input += "## Previous plan:\n\n" + last_plan + "\n"
-            human_input += "## Critique on your previous from others:\n\n" + critique + "\n"
-            
-        else:
-            if len(guidelines) > 0:
-                guideline_str += "## Reference guideline(s) for given objective.\n\n"
-                for gdl in guidelines:
-                    guideline_str+= gdl + '\n\n'
-            if len(web_summary) > 0:
-                guideline_str += "## Reference guideline(s) for given objective, from web search.\n\n"
-                guideline_str+= web_summary + '\n\n'
-            human_input = guideline_str
-
-
+        # Parse data file 
         data_files_str = "## Data files for given objective are:\n\n"
         for fn in os.listdir(data_dir):
             data_files_str += fn + "\n"
             data_files_str += "\n"
+        logger.debug("Data files for given objective are:\n\n"+data_files_str)
 
+        # Parse guidelines
+        guideline_str = ""
+        if len(guidelines) > 0:
+            human_input += "## Reference guideline(s) for given objective.\n" + guidelines + "\n"
+        
+        # Parse critique
+        if len(critique) >0: # if there is critique, no guideline needed
+            human_input = "You've previously generated a plan, and now you want to iteratively optimize your previous plan based on others criticisms of your plan:"
+            human_input += "## Previous plan:\n\n" + old_plan + "\n"
+            human_input += "## Critique on your previous from others:\n\n" + critique + "\n"
+
+        # Generate analysis workflow plan with LLM
         # Call prompt template
         prompt, input_vars = load_prompt_template('planer.gen_plan')
 
@@ -158,24 +247,30 @@ def create_planner_agent(
                 )),
             HumanMessage(content=human_input)
         ]
+
+        # Construct LLM chain 
+        chain = reason_model | JsonOutputParser()
         
         # Generate bioinformatic analysis plan
         i = 0
         while i < max_retry: 
             try:
-                response = chat_model.invoke(message)
+                response = chain.invoke(message)
+                plan = response['plan_markdown']
+                logger.info("Successfully generate analysis workflow plan:\n"+str(plan))
                 break
             except Exception as e:
                 i+=1
                 if i == max_retry:
-                    print(f"Error generate analysis pipeline: {e}")
+                    print(f"Error generate analysis workflow plan: {e}")
                     raise
     
         # Update iteration 
         n_iter += 1
 
+        # Return 
         return {
-            'plan': [response.content] ,
+            'plan': [plan] ,
             'n_iter': n_iter
         }
 
@@ -188,7 +283,7 @@ def create_planner_agent(
         plan = state['plan'][-1]
         
         # Parse human input
-        human_input = "## Plan to be reviewed\n\n" + plan + "\n"
+        human_input = "## Plan to be evaluated\n" + plan
 
         # Call prompt template
         prompt, input_vars = load_prompt_template('planer.critisim')
@@ -200,7 +295,7 @@ def create_planner_agent(
         ]
 
         # Generate critique with llm
-        chain = chat_model | JsonOutputParser()
+        chain = reason_model | JsonOutputParser()
         i = 0
         while i < max_retry: 
             try:
@@ -219,42 +314,80 @@ def create_planner_agent(
             'critique': critique
         }
 
-
-    def node_splitter(state:State):
-        """
-        """
-        # Pass inputs
-        plan = state['plan'][-1]
-        
-        # Parse human input
-        human_input = "## Plan to be splitted\n\n" + plan + "\n"
-
-        # Call prompt template
-        prompt, input_vars = load_prompt_template('planer.split')
-
-        # Construct input message
-        message = [
-            SystemMessage(content=prompt.format()),
-            HumanMessage(content=human_input)
-        ]
-
-        # Generate critique with llm
-        chain = chat_model | JsonOutputParser()
-        i = 0
-        while i < max_retry: 
+    def node_user_feedback(state:State):
+        """"""
+        # Parse inputs
+        logger.debug("START node_user_feedback")
+        # Get HITL input
+        if HILT:
+            logger.info("Use HITL input, use user input as critique.")
             try:
-                plan_list = chain.invoke(message)
-                
-                break
-            except Exception as e:
-                i+=1
-                if i == max_retry:
-                    print(f"Error split due to: \n{e}")
-                    raise  
+                human_response = interrupt(
+                    {
+                        "Please input your feedback on the plan here(n for no feedback and approve the plan):\n":state["plan"][-1]
+                    })
+                logger.debug("HITL feedback received.")
+                if human_response.lower().is.in(['n','no','nope','','skip','not','none']):
+                    critique_status = "APPROVED"
+                    logger.debug("User approved to plan, continue.")
+                else: 
+                    try:
+                        critique_status = "REVISIONS_REQUIRED"
+                        # Parse critique
+                        critique = "User provided following feedback on your plan:\n" + human_response
+                        logger.debug("User feedback successfully parsed")
+                    except:
+                        critique_status = "APPROVED"
+                        logger.debug("Failed to parse user feedback, skip this step.")
+            except:
+                logger.debug("No HITL feed back received, use default no feedback.")
+        else:
+            critique_status = "APPROVED"
+            logger.info("No HITL input, skip this step.")
 
+        # Return 
         return {
-            'splited_tasks':plan_list,
+            'critique_status':critique_status, 
+            'critique': critique, 
         }
+
+
+
+    # def node_splitter(state:State):
+    #     """
+    #     """
+    #     # Pass inputs
+    #     plan = state['plan'][-1]
+        
+    #     # Parse human input
+    #     human_input = "## Plan to be splitted\n\n" + plan + "\n"
+
+    #     # Call prompt template
+    #     prompt, input_vars = load_prompt_template('planer.split')
+
+    #     # Construct input message
+    #     message = [
+    #         SystemMessage(content=prompt.format()),
+    #         HumanMessage(content=human_input)
+    #     ]
+
+    #     # Generate critique with llm
+    #     chain = chat_model | JsonOutputParser()
+    #     i = 0
+    #     while i < max_retry: 
+    #         try:
+    #             plan_list = chain.invoke(message)
+                
+    #             break
+    #         except Exception as e:
+    #             i+=1
+    #             if i == max_retry:
+    #                 print(f"Error split due to: \n{e}")
+    #                 raise  
+
+    #     return {
+    #         'splited_tasks':plan_list,
+    #     }
     
 
 
@@ -263,14 +396,27 @@ def create_planner_agent(
     #----------------
 
     def router_is_plan_qualified(state:State):
-        if state['n_iter'] < planner_config.MAX_CRITIQUE:
-            if state['critique_status']:
+        logger.debug("START router_is_plan_qualified")
+        if state['n_iter'] < state['max_iter']:
+            if state['critique_status'] == "APPROVED":
+                logger.debug("Plan qualified, continue to human feedback.")
                 return "continue"
             else:
+                logger.debug("Plan not qualified, continue.") 
                 return "regen"
-        else: 
+        else:
+            logger.debug("Max critique iteration reached, continue to human feedback.") 
             return "continue"
-        
+    
+    def router_is_human_approve(state:State):
+        logger.debug("START router_is_human_approve")
+        if state["critique_status"] == "APPROVED":
+            logger.debug("Plan approved, end agent.")
+            return "end"
+        else:
+            logger.debug("Plan not approved, reversion.")
+            return "regen"
+
     #----------------
     # Compile graph
     #----------------
@@ -278,23 +424,30 @@ def create_planner_agent(
     # initial builder
     builder = StateGraph(State, config_schema = config_schema)
     # add nodes
-    builder.add_node("Web crawl", node_guideline_webcrawler)
-    builder.add_node("Gen plan", planner)
+    builder.add_node("Guideline fetcher", node_guideline_fetcher)
+    builder.add_node("Planner", node_planner)
     builder.add_node("Critique",node_criticism)
-    builder.add_node("Split",node_splitter)
+    builder.add_node("Feedback",node_user_feedback)
     # add edges
-    builder.add_edge(START, "Web crawl")
-    builder.add_edge("Web crawl", "Gen plan")
-    builder.add_edge("Gen plan", "Critique")
+    builder.add_edge(START, "Guideline fetcher")
+    builder.add_edge("Guideline fetcher", "Planner")
+    builder.add_edge("Planner", "Critique")
     builder.add_conditional_edges(
         "Critique",
         router_is_plan_qualified,
         {
-            "continue"   : "Split",
-            "regen"      : "CGen plan"
+            "continue"   : "Feedback",
+            "regen"      : "Planner"
         }
     )
-    builder.add_edge("Split", END)
+    builder.add_conditional_edges(
+        "Feedback",
+        router_is_human_approve,
+        {
+            "end"   : END,
+            "regen"      : "Planner"
+        }
+    )
 
     return builder.compile(
         checkpointer=checkpointer,
